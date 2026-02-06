@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <h2>Conversations</h2>
+    <ul>
+        {% for conversation in conversations %}
+            <li>
+                <strong>{{ conversation.title }}</strong>
+                <span>({{ conversation.created_at|date:"Y-m-d" }})</span>
+            </li>
+        {% empty %}
+            <li>No conversations yet. Add one in the admin panel.</li>
+        {% endfor %}
+    </ul>
+{% endblock %}
