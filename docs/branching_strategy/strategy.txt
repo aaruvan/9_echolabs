@@ -1,0 +1,4 @@
+Branching strategy:
+- Create a feature branch per assignment (e.g., A2).
+- Make small, meaningful commits on the branch.
+- Open a PR or merge back into main after review.
