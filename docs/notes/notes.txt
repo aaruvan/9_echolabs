@@ -1,0 +1,18 @@
+Week of Feb 6, 2026
+- Set up split settings with dev/prod configuration and .env usage.
+- Added four required views for Conversation model.
+- Created templates with base layout and list/empty state.
+
+View mapping for grading:
+- HttpResponse FBV: conversations_manual_view (raw HTML response)
+- render() FBV: conversations_render_view (renders conversation list template)
+- Base CBV: ConversationsBaseView (renders conversation list template)
+- Generic CBV: ConversationsListView (ListView for Conversation)
+
+Reflections (optional):
+- HttpResponse vs render: raw HTML is quick for demos, render is cleaner for templates.
+- Base CBV vs Generic CBV: Base is explicit, Generic saves boilerplate for lists.
+
+Notes/reminders:
+- Capture screenshots for all four view URLs.
+- Capture empty-state and normal list states.

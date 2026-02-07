@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="card">
+        <h2>Conversations</h2>
+        <p class="meta">Showing most recent sessions first.</p>
+        <ul class="list">
+            {% for conversation in conversations %}
+                <li class="list-item">
+                    <strong>{{ conversation.title }}</strong>
+                    <span class="badge">{{ conversation.created_at|date:"Y-m-d" }}</span>
+                </li>
+            {% empty %}
+                <li class="list-item empty">No conversations yet. Add one in the admin panel.</li>
+            {% endfor %}
+        </ul>
+    </div>
+{% endblock %}
