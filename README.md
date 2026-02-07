@@ -24,3 +24,11 @@ python manage.py runserver
 - `/conversations/render/`
 - `/conversations/cbv-base/`
 - `/conversations/cbv-generic/`
+
+## Screenshots (A2)
+These screenshots demonstrate the required four view types and the template empty/normal states.
+
+- Manual HttpResponse view: `docs/manual-view.png`
+- render() view: `docs/render-view.png`
+- Base CBV view: `docs/cbv-base-view.png`
+- Generic CBV view: `docs/cbv-generic-view.png`
