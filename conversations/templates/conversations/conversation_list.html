@@ -7,7 +7,9 @@
         <ul class="list">
             {% for conversation in conversations %}
                 <li class="list-item">
-                    <strong>{{ conversation.title }}</strong>
+                    <a href="{{ conversation.get_absolute_url }}">
+                        <strong>{{ conversation.title }}</strong>
+                    </a>
                     <span class="badge">{{ conversation.created_at|date:"Y-m-d" }}</span>
                 </li>
             {% empty %}

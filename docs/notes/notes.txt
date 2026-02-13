@@ -16,3 +16,9 @@ Reflections (optional):
 Notes/reminders:
 - Capture screenshots for all four view URLs.
 - Capture empty-state and normal list states.
+
+Week of Feb 6, 2026 (A3)
+- get_absolute_url: Conversation model uses get_absolute_url for detail links.
+- Static files: CSS is stored in project-level static/css and loaded in base.html.
+- Cache busting (optional): append a version query string like `styles.css?v=1` if needed.
+- API plan: Provide conversation list data (id, title, recorded_at, duration) via JSON.

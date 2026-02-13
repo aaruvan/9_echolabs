@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="card">
+        <h2>Conversation Analytics</h2>
+        <p class="meta">Search, filter, and summarize conversation data.</p>
+
+        <div class="form-row">
+            <form method="get">
+                <label>
+                    Title contains
+                    <input type="text" name="q" value="{{ title_query }}" />
+                </label>
+                <label>
+                    Segment contains
+                    <input type="text" name="segment" value="{{ segment_query }}" />
+                </label>
+                <button type="submit">Search (GET)</button>
+            </form>
+
+            <form method="post">
+                {% csrf_token %}
+                <label>
+                    Min duration (seconds)
+                    <input type="number" name="min_duration" value="{{ min_duration }}" />
+                </label>
+                <button type="submit">Filter (POST)</button>
+            </form>
+        </div>
+
+        <h3>Summary</h3>
+        <p>Total conversations: <strong>{{ total_count }}</strong></p>
+        <ul class="list">
+            {% for row in by_user %}
+                <li class="list-item">
+                    <span>{{ row.user__username|default:"(no user)" }}</span>
+                    <span class="badge">{{ row.total }}</span>
+                </li>
+            {% empty %}
+                <li class="list-item empty">No summary data available.</li>
+            {% endfor %}
+        </ul>
+
+        <h3>Results</h3>
+        <ul class="list">
+            {% for conversation in conversations %}
+                <li class="list-item">
+                    <a href="{{ conversation.get_absolute_url }}">
+                        <strong>{{ conversation.title }}</strong>
+                    </a>
+                    <span class="badge">{{ conversation.recorded_at|date:"Y-m-d" }}</span>
+                </li>
+            {% empty %}
+                <li class="list-item empty">No conversations match your filters.</li>
+            {% endfor %}
+        </ul>
+    </div>
+{% endblock %}

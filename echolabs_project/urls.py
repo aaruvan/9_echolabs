@@ -18,7 +18,16 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
+from conversations.views import conversations_api_json, conversations_api_text, home_view
+
 urlpatterns = [
+    path("", home_view, name="home"),
     path("admin/", admin.site.urls),
     path("conversations/", include("conversations.urls")),
+    path("api/conversations/", conversations_api_json, name="conversations_api_json"),
+    path(
+        "api/conversations.txt",
+        conversations_api_text,
+        name="conversations_api_text",
+    ),
 ]

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="card">
+        <h2>Conversation Chart</h2>
+        <p class="meta">Chart generated from live database data.</p>
+        <figure>
+            <img
+                src="{% url 'conversation_chart_png' %}"
+                alt="Bar chart showing conversations by user"
+                style="max-width: 100%; height: auto;"
+            />
+            <figcaption class="meta">
+                Conversations grouped by user account.
+            </figcaption>
+        </figure>
+    </div>
+{% endblock %}
