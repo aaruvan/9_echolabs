@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block content %}
+    <div class="card">
+        <h2>{{ conversation.title }}</h2>
+        <p class="meta">
+            Recorded: {{ conversation.recorded_at|date:"Y-m-d H:i" }}
+        </p>
+        <p class="meta">
+            Duration: {{ conversation.duration_seconds|default:"N/A" }} seconds
+        </p>
+        <h3>Transcript Segments</h3>
+        <ul class="list">
+            {% for segment in conversation.segments.all %}
+                <li class="list-item">
+                    <span>Segment {{ segment.segment_order }}</span>
+                    <span class="badge">{{ segment.text|truncatechars:40 }}</span>
+                </li>
+            {% empty %}
+                <li class="list-item empty">No segments yet.</li>
+            {% endfor %}
+        </ul>
+    </div>
+{% endblock %}

@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.urls import reverse
 
 
 class Conversation(models.Model):
@@ -24,6 +25,9 @@ class Conversation(models.Model):
 
     def __str__(self):
         return f"{self.title} ({self.recorded_at.date()})"
+
+    def get_absolute_url(self):
+        return reverse("conversation_detail", kwargs={"pk": self.pk})
 
 
 class TranscriptSegment(models.Model):
