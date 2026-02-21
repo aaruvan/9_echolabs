@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <h2>External API: GitHub repo search</h2>
+    <p class="meta">Search repositories and see combined with your internal conversation count.</p>
+    <form method="get" action="">
+        <label>
+            Search <code>?q=</code>
+            <input type="text" name="q" value="{{ q }}" placeholder="e.g. django" />
+        </label>
+        <button type="submit">Search</button>
+    </form>
+    <p class="meta">Internal data: you have <strong>{{ internal_count }}</strong> conversation(s) in Echolabs.</p>
+    {% if error %}
+        <p class="meta" style="color: #b91c1c;">Error: {{ error }}</p>
+    {% endif %}
+    {% if repos %}
+        <ul class="list">
+            {% for repo in repos %}
+                <li class="list-item">
+                    <strong>{{ repo.name }}</strong>
+                    <span class="badge">{{ repo.stars }} stars</span>
+                    <br />
+                    <span class="meta">{{ repo.description }}</span>
+                </li>
+            {% endfor %}
+        </ul>
+    {% elif q and not error %}
+        <p class="meta">No repositories found.</p>
+    {% endif %}
+    <p class="meta"><a href="?q={{ q }}&format=json">View as JSON</a></p>
+</div>
+{% endblock %}
