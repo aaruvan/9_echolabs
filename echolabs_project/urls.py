@@ -18,16 +18,34 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
-from conversations.views import conversations_api_json, conversations_api_text, home_view
+from conversations.views import (
+    api_summary,
+    conversations_api_json,
+    conversations_api_text,
+    export_conversations_csv,
+    export_conversations_json,
+    external_api_view,
+    home_view,
+    reports_view,
+    vega_lite_chart1_png,
+    vega_lite_chart2_jpg,
+    vega_lite_charts_view,
+)
 
 urlpatterns = [
     path("", home_view, name="home"),
     path("admin/", admin.site.urls),
     path("conversations/", include("conversations.urls")),
+    path("reports/", reports_view, name="reports"),
+    path("reports/export/csv/", export_conversations_csv, name="export_conversations_csv"),
+    path("reports/export/json/", export_conversations_json, name="export_conversations_json"),
+    path("external/", external_api_view, name="external_api"),
+    path("vega-lite/", vega_lite_charts_view, name="vega_lite_charts"),
+    path("vega-lite/chart1.png", vega_lite_chart1_png, name="vega_lite_chart1_png"),
+    path("vega-lite/chart2.jpg", vega_lite_chart2_jpg, name="vega_lite_chart2_jpg"),
+    # API routes
+    path("api/summary/", api_summary, name="api_summary"),
     path("api/conversations/", conversations_api_json, name="conversations_api_json"),
-    path(
-        "api/conversations.txt",
-        conversations_api_text,
-        name="conversations_api_text",
-    ),
+    path("api/conversations.txt", conversations_api_text, name="conversations_api_text"),
+    path("api/external/", external_api_view, name="api_external"),
 ]

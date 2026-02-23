@@ -19,7 +19,7 @@ build/
 local_settings.py
 .env
 .env.local
-db.sqlite3
+staticfiles/
 
 # IDE
 .idea/

@@ -122,3 +122,24 @@ button:hover {
     font-size: 12px;
     margin-left: 8px;
 }
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 20px;
+}
+th, td {
+    padding: 8px 12px;
+    text-align: left;
+    border: 1px solid #e5e7eb;
+}
+th {
+    background: #f9fafb;
+    font-weight: 600;
+}
+.card h3 {
+    margin: 20px 0 8px;
+    font-size: 16px;
+}
+.card h3:first-of-type {
+    margin-top: 16px;
+}

@@ -1,17 +1,20 @@
+import csv
 import io
+from datetime import datetime
 
 import matplotlib
 
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
+import requests
 from django.db.models import Count
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views import View
 from django.views.generic import DetailView, ListView
 
-from .models import Conversation
+from .models import Conversation, ImprovementNote, TranscriptSegment
 
 
 def conversations_manual_view(request):
@@ -195,3 +198,220 @@ def conversations_api_text(request):
     if len(lines) == 1:
         lines.append("No conversations found.")
     return HttpResponse("\n".join(lines), content_type="text/plain")
+
+
+def api_summary(request):
+    """
+    Internal JSON API for chart-ready data (e.g. Vega-Lite).
+    GET /api/summary/ — returns conversations aggregated by user.
+    """
+    if request.method != "GET":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+
+    rows = (
+        Conversation.objects.values("user__username")
+        .annotate(count=Count("id"))
+        .order_by("-count", "user__username")
+    )
+    data = [
+        {"username": row["user__username"] or "Unknown", "count": row["count"]}
+        for row in rows
+    ]
+    return JsonResponse(data, safe=False)
+
+
+def vega_lite_charts_view(request):
+    """Page that embeds both Vega-Lite charts (bar + scatter) using data from API URLs."""
+    return render(request, "conversations/vega_lite_charts.html")
+
+
+def vega_lite_chart1_png(request):
+    """Bar chart as PNG; data from same source as /api/summary/."""
+    import vl_convert as vlc
+
+    rows = (
+        Conversation.objects.values("user__username")
+        .annotate(count=Count("id"))
+        .order_by("-count", "user__username")
+    )
+    data = [
+        {"username": row["user__username"] or "Unknown", "count": row["count"]}
+        for row in rows
+    ]
+    spec = {
+        "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+        "data": {"values": data},
+        "mark": "bar",
+        "encoding": {
+            "x": {"field": "username", "type": "nominal", "title": "User"},
+            "y": {"field": "count", "type": "quantitative", "title": "Count"},
+        },
+        "title": "Conversations by User",
+    }
+    png_bytes = vlc.vegalite_to_png(spec)
+    return HttpResponse(png_bytes, content_type="image/png")
+
+
+def vega_lite_chart2_jpg(request):
+    """Scatter chart as JPEG; data from same source as /api/conversations/."""
+    import vl_convert as vlc
+
+    conversations = Conversation.objects.all().order_by("recorded_at")
+    data = [
+        {
+            "recorded_at": c.recorded_at.isoformat(),
+            "duration_seconds": c.duration_seconds or 0,
+        }
+        for c in conversations
+    ]
+    spec = {
+        "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+        "data": {"values": data},
+        "mark": "point",
+        "encoding": {
+            "x": {"field": "recorded_at", "type": "temporal", "title": "Recorded"},
+            "y": {"field": "duration_seconds", "type": "quantitative", "title": "Duration (s)"},
+        },
+        "title": "Duration by Recorded Date",
+    }
+    png_bytes = vlc.vegalite_to_png(spec)
+    from PIL import Image
+
+    img = Image.open(io.BytesIO(png_bytes)).convert("RGB")
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+    return HttpResponse(buf.getvalue(), content_type="image/jpeg")
+
+
+def external_api_view(request):
+    """
+    Pull data from an external API (GitHub repo search), combine with internal
+    data (conversation count), return template or JSON.
+    Query param: ?q= search term (e.g. django).
+    """
+    q = request.GET.get("q", "").strip()
+    wants_json = (
+        "application/json" in request.headers.get("Accept", "")
+        or request.GET.get("format") == "json"
+    )
+
+    internal_count = Conversation.objects.count()
+
+    if not q:
+        context = {"error": None, "q": "", "internal_count": internal_count, "repos": []}
+        if wants_json:
+            return JsonResponse(
+                {"error": "Missing query parameter q", "internal_count": internal_count}
+            )
+        return render(request, "conversations/external_api.html", context)
+
+    try:
+        r = requests.get(
+            "https://api.github.com/search/repositories",
+            params={"q": q, "per_page": 5},
+            timeout=5,
+        )
+        r.raise_for_status()
+        data = r.json()
+        repos = [
+            {
+                "name": item.get("full_name", ""),
+                "description": (item.get("description") or "")[:200],
+                "stars": item.get("stargazers_count", 0),
+            }
+            for item in data.get("items", [])[:5]
+        ]
+        error = None
+    except requests.RequestException as e:
+        repos = []
+        error = str(e)
+    except (ValueError, KeyError) as e:
+        repos = []
+        error = f"Unexpected response: {e}"
+
+    combined = {
+        "q": q,
+        "internal_count": internal_count,
+        "repos": repos,
+        "error": error,
+    }
+
+    if wants_json:
+        if error:
+            return JsonResponse(combined, status=502)
+        return JsonResponse(combined)
+
+    return render(request, "conversations/external_api.html", combined)
+
+
+def export_conversations_csv(request):
+    """Download conversations as CSV; timestamped filename, headers, ordered rows."""
+    now = datetime.now()
+    filename = f"conversations_{now:%Y-%m-%d_%H-%M}.csv"
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+
+    writer = csv.writer(response)
+    writer.writerow(["id", "user", "title", "recorded_at", "duration_seconds", "created_at"])
+    for c in Conversation.objects.all().order_by("-recorded_at"):
+        writer.writerow([
+            c.id,
+            c.user.username if c.user_id else "",
+            c.title,
+            c.recorded_at.isoformat(),
+            c.duration_seconds if c.duration_seconds is not None else "",
+            c.created_at.isoformat(),
+        ])
+    return response
+
+
+def export_conversations_json(request):
+    """Download conversations as pretty JSON with metadata and timestamped filename."""
+    now = datetime.now()
+    filename = f"conversations_{now:%Y-%m-%d_%H-%M}.json"
+    qs = Conversation.objects.all().order_by("-recorded_at")
+    records = [
+        {
+            "id": c.id,
+            "user": c.user.username if c.user_id else "",
+            "title": c.title,
+            "recorded_at": c.recorded_at.isoformat(),
+            "duration_seconds": c.duration_seconds,
+            "created_at": c.created_at.isoformat(),
+        }
+        for c in qs
+    ]
+    data = {
+        "generated_at": now.isoformat(),
+        "record_count": len(records),
+        "conversations": records,
+    }
+    response = JsonResponse(data, json_dumps_params={"indent": 2})
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+def reports_view(request):
+    """Reports page: two grouped summaries, totals line, export links."""
+    conversations = Conversation.objects.all()
+    total_conversations = conversations.count()
+    total_segments = TranscriptSegment.objects.count()
+
+    by_user = (
+        conversations.values("user__username")
+        .annotate(count=Count("id"))
+        .order_by("-count", "user__username")
+    )
+    by_note_type = (
+        ImprovementNote.objects.values("note_type")
+        .annotate(count=Count("id"))
+        .order_by("-count")
+    )
+
+    context = {
+        "total_conversations": total_conversations,
+        "total_segments": total_segments,
+        "by_user": by_user,
+        "by_note_type": by_note_type,
+    }
+    return render(request, "conversations/reports.html", context)
