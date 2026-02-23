@@ -2,11 +2,6 @@ import csv
 import io
 from datetime import datetime
 
-import matplotlib
-
-matplotlib.use("Agg")
-
-import matplotlib.pyplot as plt
 import requests
 from django.db.models import Count
 from django.http import HttpResponse, JsonResponse
@@ -137,6 +132,10 @@ class ConversationAnalyticsView(ListView):
 
 
 def conversation_chart_png(request):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
     rows = (
         Conversation.objects.values("user__username")
         .annotate(total=Count("id"))
