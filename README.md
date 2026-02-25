@@ -1,6 +1,6 @@
 # Echolabs
 
-Early-stage Django app for analyzing conversations with transcripts and feedback notes.
+Early-stage Django app for analyzing conversations with transcripts and feedback notes
 
 ## Setup
 1) Create and activate a venv (Python 3.11+).
