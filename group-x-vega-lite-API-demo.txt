@@ -1,0 +1,13 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "description": "Conversations by user from the public API.",
+  "data": {
+    "url": "https://UttkarshS.pythonanywhere.com/api/public/conversations/",
+    "format": { "type": "json" }
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": { "field": "user", "type": "nominal", "title": "User" },
+    "y": { "field": "total", "type": "quantitative", "title": "Conversations" }
+  }
+}

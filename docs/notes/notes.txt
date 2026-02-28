@@ -22,3 +22,8 @@ Week of Feb 6, 2026 (A3)
 - Static files: CSS is stored in project-level static/css and loaded in base.html.
 - Cache busting (optional): append a version query string like `styles.css?v=1` if needed.
 - API plan: Provide conversation list data (id, title, recorded_at, duration) via JSON.
+
+Week of Feb 20, 2026 (A5)
+- Auth: Login required for conversations, analytics, chart, and protected APIs.
+- Google OAuth: allauth configured; add client ID/secret and Sites domain in admin.
+- Public API: /api/public/conversations/ is public for Vega-Lite visualization.

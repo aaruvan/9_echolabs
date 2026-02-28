@@ -14,11 +14,19 @@
                 <p>Conversation insights and feedback</p>
                 <nav>
                     <a href="{% url 'home' %}">Home</a>
-                    <a href="{% url 'conversations_list' %}">Conversations</a>
-                    <a href="{% url 'conversation_analytics' %}">Analytics</a>
-                    <a href="{% url 'vega_lite_charts' %}">Vega-Lite Charts</a>
-                    <a href="{% url 'external_api' %}">External API</a>
-                    <a href="{% url 'reports' %}">Reports</a>
+                    <a href="{% url 'public_conversations_api_json' %}">Public API</a>
+                    {% if user.is_authenticated %}
+                        <a href="{% url 'conversations_list' %}">Conversations</a>
+                        <a href="{% url 'conversation_analytics' %}">Analytics</a>
+                        <a href="{% url 'conversation_chart' %}">Chart</a>
+                        <a href="{% url 'vega_lite_charts' %}">Vega-Lite Charts</a>
+                        <a href="{% url 'external_api' %}">External API</a>
+                        <a href="{% url 'reports' %}">Reports</a>
+                        <a href="{% url 'account_logout' %}">Logout</a>
+                    {% else %}
+                        <a href="{% url 'account_login' %}">Login</a>
+                        <a href="{% url 'account_signup' %}">Sign up</a>
+                    {% endif %}
                 </nav>
             </div>
         </header>

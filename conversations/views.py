@@ -6,12 +6,15 @@ import requests
 from django.db.models import Count
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views import View
 from django.views.generic import DetailView, ListView
 
 from .models import Conversation, ImprovementNote, TranscriptSegment
 
 
+@login_required
 def conversations_manual_view(request):
     conversations = Conversation.objects.all().order_by("-created_at")
     if conversations:
@@ -35,6 +38,7 @@ def conversations_manual_view(request):
     return HttpResponse(html)
 
 
+@login_required
 def conversations_render_view(request):
     conversations = Conversation.objects.all().order_by("-created_at")
     context = {"conversations": conversations}
@@ -49,14 +53,14 @@ def home_view(request):
     return render(request, "home.html", context)
 
 
-class ConversationsBaseView(View):
+class ConversationsBaseView(LoginRequiredMixin, View):
     def get(self, request):
         conversations = Conversation.objects.all().order_by("-created_at")
         context = {"conversations": conversations}
         return render(request, "conversations/conversation_list.html", context)
 
 
-class ConversationsListView(ListView):
+class ConversationsListView(LoginRequiredMixin, ListView):
     model = Conversation
     template_name = "conversations/conversation_list.html"
     context_object_name = "conversations"
@@ -65,13 +69,13 @@ class ConversationsListView(ListView):
         return Conversation.objects.all().order_by("-created_at")
 
 
-class ConversationDetailView(DetailView):
+class ConversationDetailView(LoginRequiredMixin, DetailView):
     model = Conversation
     template_name = "conversations/conversation_detail.html"
     context_object_name = "conversation"
 
 
-class ConversationAnalyticsView(ListView):
+class ConversationAnalyticsView(LoginRequiredMixin, ListView):
     template_name = "conversations/conversation_analytics.html"
     model = Conversation
     context_object_name = "conversations"
@@ -131,6 +135,7 @@ class ConversationAnalyticsView(ListView):
         return context
 
 
+@login_required
 def conversation_chart_png(request):
     import matplotlib
     matplotlib.use("Agg")
@@ -163,10 +168,24 @@ def conversation_chart_png(request):
     return HttpResponse(buffer.getvalue(), content_type="image/png")
 
 
+@login_required
 def conversation_chart_view(request):
     return render(request, "conversations/conversation_chart.html")
 
 
+def public_conversations_api_json(request):
+    rows = Conversation.objects.values("user__username").annotate(total=Count("id"))
+    data = [
+        {
+            "user": row["user__username"] or "Unknown",
+            "total": row["total"],
+        }
+        for row in rows
+    ]
+    return JsonResponse(data, safe=False)
+
+
+@login_required
 def conversations_api_json(request):
     query = request.GET.get("q", "").strip()
     conversations = Conversation.objects.all()
@@ -185,6 +204,7 @@ def conversations_api_json(request):
     return JsonResponse(data, safe=False)
 
 
+@login_required
 def conversations_api_text(request):
     query = request.GET.get("q", "").strip()
     conversations = Conversation.objects.all()
@@ -199,6 +219,7 @@ def conversations_api_text(request):
     return HttpResponse("\n".join(lines), content_type="text/plain")
 
 
+@login_required
 def api_summary(request):
     """
     Internal JSON API for chart-ready data (e.g. Vega-Lite).
@@ -219,11 +240,13 @@ def api_summary(request):
     return JsonResponse(data, safe=False)
 
 
+@login_required
 def vega_lite_charts_view(request):
     """Page that embeds both Vega-Lite charts (bar + scatter) using data from API URLs."""
     return render(request, "conversations/vega_lite_charts.html")
 
 
+@login_required
 def vega_lite_chart1_png(request):
     """Bar chart as PNG; data from same source as /api/summary/."""
     import vl_convert as vlc
@@ -251,6 +274,7 @@ def vega_lite_chart1_png(request):
     return HttpResponse(png_bytes, content_type="image/png")
 
 
+@login_required
 def vega_lite_chart2_jpg(request):
     """Scatter chart as JPEG; data from same source as /api/conversations/."""
     import vl_convert as vlc
@@ -282,6 +306,7 @@ def vega_lite_chart2_jpg(request):
     return HttpResponse(buf.getvalue(), content_type="image/jpeg")
 
 
+@login_required
 def external_api_view(request):
     """
     Pull data from an external API (GitHub repo search), combine with internal
@@ -343,6 +368,7 @@ def external_api_view(request):
     return render(request, "conversations/external_api.html", combined)
 
 
+@login_required
 def export_conversations_csv(request):
     """Download conversations as CSV; timestamped filename, headers, ordered rows."""
     now = datetime.now()
@@ -364,6 +390,7 @@ def export_conversations_csv(request):
     return response
 
 
+@login_required
 def export_conversations_json(request):
     """Download conversations as pretty JSON with metadata and timestamped filename."""
     now = datetime.now()
@@ -390,6 +417,7 @@ def export_conversations_json(request):
     return response
 
 
+@login_required
 def reports_view(request):
     """Reports page: two grouped summaries, totals line, export links."""
     conversations = Conversation.objects.all()
