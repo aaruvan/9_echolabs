@@ -74,7 +74,7 @@ All A5 features are implemented and working locally. Production deployment was b
 
 **Google OAuth:** configured via `django-allauth`. Redirect URIs set for localhost and production. SocialApp configured in Django admin.
 
-**Vega-Lite:** spec in `group-x-vega-lite-API-demo.txt`, pulls from public API.
+**Vega-Lite:** spec in `group-9-vega-lite-API-demo.txt`, pulls from public API.
 
 **3 public API use cases:** `docs/a5/use_cases/` (Python scripts with descriptions).
 
