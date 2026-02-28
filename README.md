@@ -6,6 +6,7 @@ Early-stage Django app for analyzing conversations with transcripts and feedback
 1) Create and activate a venv (Python 3.11+).
 2) Install deps: `pip install -r requirements.txt`
 3) Create `.env` from `.env.example` and set `SECRET_KEY`.
+4) For Google OAuth, set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 
 ## Run (dev)
 ```
@@ -19,6 +20,11 @@ python manage.py runserver
 $env:DJANGO_SETTINGS_MODULE="echolabs_project.settings.prod"
 python manage.py runserver
 ```
+
+## OAuth setup (allauth)
+- Add `Sites` entry in Django admin with your production domain.
+- Add a SocialApp for Google with client ID/secret.
+- In Google Cloud, add both localhost and production redirect URIs.
 
 ## View URLs (A2)
 - `/conversations/manual/`
@@ -53,3 +59,17 @@ UI note: styling is loaded from `static/css/styles.css` via Django static files.
 - Analytics page (GET + POST forms + aggregates): `docs/a3-analytics.png`
 - Chart page and PNG endpoint: `docs/a3-chart.png`
 - JSON API output in browser: `docs/a3-api-json.png`
+
+## A5 Overview
+Authentication is required for protected pages and APIs, with Google OAuth via allauth.
+One public API endpoint is available for Vega-Lite visualization.
+
+## View URLs (A5)
+- `/accounts/login/` and `/accounts/signup/`
+- Protected pages: `/conversations/`, `/conversations/analytics/`, `/conversations/chart/`
+- Protected APIs: `/api/conversations/` and `/api/conversations.txt`
+- Public API (Vega-Lite): `/api/public/conversations/`
+
+## A5 Files
+- Vega-Lite spec: `group-x-vega-lite-API-demo.txt`
+- Use case scripts: `docs/a5/use_cases/`
