@@ -6,12 +6,15 @@ import requests
 from django.db.models import Count
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views import View
 from django.views.generic import DetailView, ListView
 
 from .models import Conversation, ImprovementNote, TranscriptSegment
 
 
+@login_required
 def conversations_manual_view(request):
     conversations = Conversation.objects.all().order_by("-created_at")
     if conversations:
@@ -35,6 +38,7 @@ def conversations_manual_view(request):
     return HttpResponse(html)
 
 
+@login_required
 def conversations_render_view(request):
     conversations = Conversation.objects.all().order_by("-created_at")
     context = {"conversations": conversations}
@@ -49,14 +53,14 @@ def home_view(request):
     return render(request, "home.html", context)
 
 
-class ConversationsBaseView(View):
+class ConversationsBaseView(LoginRequiredMixin, View):
     def get(self, request):
         conversations = Conversation.objects.all().order_by("-created_at")
         context = {"conversations": conversations}
         return render(request, "conversations/conversation_list.html", context)
 
 
-class ConversationsListView(ListView):
+class ConversationsListView(LoginRequiredMixin, ListView):
     model = Conversation
     template_name = "conversations/conversation_list.html"
     context_object_name = "conversations"
@@ -65,13 +69,13 @@ class ConversationsListView(ListView):
         return Conversation.objects.all().order_by("-created_at")
 
 
-class ConversationDetailView(DetailView):
+class ConversationDetailView(LoginRequiredMixin, DetailView):
     model = Conversation
     template_name = "conversations/conversation_detail.html"
     context_object_name = "conversation"
 
 
-class ConversationAnalyticsView(ListView):
+class ConversationAnalyticsView(LoginRequiredMixin, ListView):
     template_name = "conversations/conversation_analytics.html"
     model = Conversation
     context_object_name = "conversations"
@@ -131,6 +135,7 @@ class ConversationAnalyticsView(ListView):
         return context
 
 
+@login_required
 def conversation_chart_png(request):
     import matplotlib
     matplotlib.use("Agg")
@@ -163,10 +168,24 @@ def conversation_chart_png(request):
     return HttpResponse(buffer.getvalue(), content_type="image/png")
 
 
+@login_required
 def conversation_chart_view(request):
     return render(request, "conversations/conversation_chart.html")
 
 
+def public_conversations_api_json(request):
+    rows = Conversation.objects.values("user__username").annotate(total=Count("id"))
+    data = [
+        {
+            "user": row["user__username"] or "Unknown",
+            "total": row["total"],
+        }
+        for row in rows
+    ]
+    return JsonResponse(data, safe=False)
+
+
+@login_required
 def conversations_api_json(request):
     query = request.GET.get("q", "").strip()
     conversations = Conversation.objects.all()
@@ -185,6 +204,7 @@ def conversations_api_json(request):
     return JsonResponse(data, safe=False)
 
 
+@login_required
 def conversations_api_text(request):
     query = request.GET.get("q", "").strip()
     conversations = Conversation.objects.all()

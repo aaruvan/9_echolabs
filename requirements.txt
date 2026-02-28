@@ -4,3 +4,4 @@ matplotlib
 requests
 vl-convert-python
 Pillow
+django-allauth
