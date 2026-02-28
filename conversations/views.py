@@ -219,6 +219,7 @@ def conversations_api_text(request):
     return HttpResponse("\n".join(lines), content_type="text/plain")
 
 
+@login_required
 def api_summary(request):
     """
     Internal JSON API for chart-ready data (e.g. Vega-Lite).
@@ -239,11 +240,13 @@ def api_summary(request):
     return JsonResponse(data, safe=False)
 
 
+@login_required
 def vega_lite_charts_view(request):
     """Page that embeds both Vega-Lite charts (bar + scatter) using data from API URLs."""
     return render(request, "conversations/vega_lite_charts.html")
 
 
+@login_required
 def vega_lite_chart1_png(request):
     """Bar chart as PNG; data from same source as /api/summary/."""
     import vl_convert as vlc
@@ -271,6 +274,7 @@ def vega_lite_chart1_png(request):
     return HttpResponse(png_bytes, content_type="image/png")
 
 
+@login_required
 def vega_lite_chart2_jpg(request):
     """Scatter chart as JPEG; data from same source as /api/conversations/."""
     import vl_convert as vlc
@@ -302,6 +306,7 @@ def vega_lite_chart2_jpg(request):
     return HttpResponse(buf.getvalue(), content_type="image/jpeg")
 
 
+@login_required
 def external_api_view(request):
     """
     Pull data from an external API (GitHub repo search), combine with internal
@@ -363,6 +368,7 @@ def external_api_view(request):
     return render(request, "conversations/external_api.html", combined)
 
 
+@login_required
 def export_conversations_csv(request):
     """Download conversations as CSV; timestamped filename, headers, ordered rows."""
     now = datetime.now()
@@ -384,6 +390,7 @@ def export_conversations_csv(request):
     return response
 
 
+@login_required
 def export_conversations_json(request):
     """Download conversations as pretty JSON with metadata and timestamped filename."""
     now = datetime.now()
@@ -410,6 +417,7 @@ def export_conversations_json(request):
     return response
 
 
+@login_required
 def reports_view(request):
     """Reports page: two grouped summaries, totals line, export links."""
     conversations = Conversation.objects.all()
