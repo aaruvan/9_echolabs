@@ -60,16 +60,26 @@ UI note: styling is loaded from `static/css/styles.css` via Django static files.
 - Chart page and PNG endpoint: `docs/a3-chart.png`
 - JSON API output in browser: `docs/a3-api-json.png`
 
-## A5 Overview
-Authentication is required for protected pages and APIs, with Google OAuth via allauth.
-One public API endpoint is available for Vega-Lite visualization.
+## A5 – Authentication, OAuth, Public API
+
+All A5 features are implemented and working locally. Production deployment was blocked by a disk quota limit on the PythonAnywhere free tier.
+
+**Implemented:**
+- Login/signup pages with username and Google OAuth ("Continue with Google")
+- Logout functionality
+- All non-home pages and APIs require login (`@login_required` / `LoginRequiredMixin`)
+- Navigation hides protected links before login, shows them after
+- One public API endpoint (no auth required): `/api/public/conversations/`
+- All other APIs protected
+
+**Google OAuth:** configured via `django-allauth`. Redirect URIs set for localhost and production. SocialApp configured in Django admin.
+
+**Vega-Lite:** spec in `group-x-vega-lite-API-demo.txt`, pulls from public API.
+
+**3 public API use cases:** `docs/a5/use_cases/` (Python scripts with descriptions).
 
 ## View URLs (A5)
 - `/accounts/login/` and `/accounts/signup/`
-- Protected pages: `/conversations/`, `/conversations/analytics/`, `/conversations/chart/`
-- Protected APIs: `/api/conversations/` and `/api/conversations.txt`
-- Public API (Vega-Lite): `/api/public/conversations/`
-
-## A5 Files
-- Vega-Lite spec: `group-x-vega-lite-API-demo.txt`
-- Use case scripts: `docs/a5/use_cases/`
+- Protected: `/conversations/`, `/conversations/analytics/`, `/conversations/chart/`, `/reports/`, `/vega-lite/`, `/external/`
+- Protected APIs: `/api/conversations/`, `/api/conversations.txt`, `/api/summary/`
+- Public API: `/api/public/conversations/`
