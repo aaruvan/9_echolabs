@@ -26,6 +26,7 @@ from conversations.views import (
     export_conversations_json,
     external_api_view,
     home_view,
+    public_conversations_api_json,
     reports_view,
     vega_lite_chart1_png,
     vega_lite_chart2_jpg,
@@ -35,6 +36,7 @@ from conversations.views import (
 urlpatterns = [
     path("", home_view, name="home"),
     path("admin/", admin.site.urls),
+    path("accounts/", include("allauth.urls")),
     path("conversations/", include("conversations.urls")),
     path("reports/", reports_view, name="reports"),
     path("reports/export/csv/", export_conversations_csv, name="export_conversations_csv"),
@@ -46,6 +48,15 @@ urlpatterns = [
     # API routes
     path("api/summary/", api_summary, name="api_summary"),
     path("api/conversations/", conversations_api_json, name="conversations_api_json"),
-    path("api/conversations.txt", conversations_api_text, name="conversations_api_text"),
+    path(
+        "api/conversations.txt",
+        conversations_api_text,
+        name="conversations_api_text",
+    ),
+    path(
+        "api/public/conversations/",
+        public_conversations_api_json,
+        name="public_conversations_api_json",
+    ),
     path("api/external/", external_api_view, name="api_external"),
 ]
