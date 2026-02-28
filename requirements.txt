@@ -5,3 +5,5 @@ requests
 vl-convert-python
 Pillow
 django-allauth
+PyJWT
+cryptography
