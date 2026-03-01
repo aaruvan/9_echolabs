@@ -75,6 +75,16 @@ print('tester ready.')
 
 ---
 
+## Populate filler counts and Quick Insights (optional)
+
+If conversations show **0 fillers** and **No insights yet**, run once to add improvement notes to existing conversations:
+
+```bash
+python manage.py add_notes_to_conversations
+```
+
+---
+
 ## Important: commit the built CSS
 
 The Lovable theme uses **`static/css/lovable.css`**, which is built by Tailwind. PythonAnywhere doesn’t need Node if that file is **already in the repo**:
