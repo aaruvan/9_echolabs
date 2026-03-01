@@ -247,6 +247,7 @@ def conversation_chart_view(request):
 
 
 def public_conversations_api_json(request):
+    """Public API: no login required. CORS enabled so Vega-Lite editor can fetch data."""
     rows = Conversation.objects.values("user__username").annotate(total=Count("id"))
     data = [
         {
@@ -255,7 +256,9 @@ def public_conversations_api_json(request):
         }
         for row in rows
     ]
-    return JsonResponse(data, safe=False)
+    response = JsonResponse(data, safe=False)
+    response["Access-Control-Allow-Origin"] = "*"
+    return response
 
 
 @login_required

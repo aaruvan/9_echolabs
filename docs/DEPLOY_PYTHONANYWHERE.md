@@ -2,18 +2,33 @@
 
 Run these in order (in a **Bash** console on PythonAnywhere, with your project directory and venv active).
 
-## 1. Pull
+## 0. View branches and environments
+
+**Git branches:**
+```bash
+git branch -a              # list all branches (local + remote)
+git branch                 # current branch only
+git status                 # current branch and whether up to date
+```
+
+**Virtual environments (PythonAnywhere):**  
+Web tab → **Virtualenv** section shows the one attached to your app. In Bash, `ls ~/virtualenvs` or `workon` (if using virtualenvwrapper) lists venvs.
+
+## 1. Pull (from A5.2)
 
 ```bash
 cd ~/echolabs   # or your project path
-git pull
+git fetch origin
+git checkout A5.2
+git pull origin A5.2
 ```
 
 ## 2. Activate venv (if not already)
 
 ```bash
-source venv/bin/activate
-# or: workon echolabs   (if using virtualenvwrapper)
+source /home/vanshiaaru/.virtualenvs/echolabs-venv/bin/activate
+# or from project dir: source ~/.virtualenvs/echolabs-venv/bin/activate
+# or: workon echolabs-venv   (if using virtualenvwrapper)
 ```
 
 ## 3. Install Python deps (only if requirements.txt changed)
@@ -40,6 +55,23 @@ This copies everything from `static/` (including `static/css/lovable.css`) into 
 
 - Open the **Web** tab on PythonAnywhere.
 - Click **Reload** for your app (e.g. vanshiaaru.pythonanywhere.com).
+
+---
+
+## Create or reset `tester` user (production only)
+
+Run this once after deploy so login works with `tester` / `uiuc12345`:
+
+```bash
+python manage.py shell -c "
+from django.contrib.auth import get_user_model
+User = get_user_model()
+u, _ = User.objects.get_or_create(username='tester', defaults={'email': 'tester@example.com'})
+u.set_password('uiuc12345')
+u.save()
+print('tester ready.')
+"
+```
 
 ---
 
