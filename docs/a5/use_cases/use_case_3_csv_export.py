@@ -1,7 +1,13 @@
+"""
+A5 Use Case 3: Export public API data to CSV.
+Production API: vanshiaaru.pythonanywhere.com (Team 9 – EchoLabs).
+Run: python use_case_3_csv_export.py
+Then capture a screenshot showing the script output and/or the generated CSV for submission.
+"""
 import csv
 import requests
 
-API_URL = "https://YOURDOMAIN/api/public/conversations/"
+API_URL = "https://vanshiaaru.pythonanywhere.com/api/public/conversations/"
 OUTPUT_FILE = "public_api_export.csv"
 
 response = requests.get(API_URL, timeout=10)

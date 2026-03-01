@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Progress — EchoLabs{% endblock %}
+
+{% block content %}
+<h1 class="text-3xl font-bold tracking-tight text-foreground">
+    Progress <span class="gradient-text">Tracking</span>
+</h1>
+<p class="mt-2 text-muted-foreground">Your conversation and filler-note metrics over the past week.</p>
+
+{# Stats #}
+<div class="mt-8 grid grid-cols-2 gap-3 md:grid-cols-4">
+    <div class="rounded-lg border border-border bg-card p-4">
+        <span class="metric-label">Total conversations</span>
+        <div class="mt-2 flex items-baseline gap-2">
+            <span class="text-xl font-semibold font-mono text-foreground">{{ total_conversations }}</span>
+        </div>
+    </div>
+    <div class="rounded-lg border border-border bg-card p-4">
+        <span class="metric-label">Filler notes (total)</span>
+        <div class="mt-2 flex items-baseline gap-2">
+            <span class="text-xl font-semibold font-mono text-foreground">{{ total_filler }}</span>
+        </div>
+    </div>
+    <div class="rounded-lg border border-border bg-card p-4">
+        <span class="metric-label">Avg fillers per conv</span>
+        <div class="mt-2 flex items-baseline gap-2">
+            <span class="text-xl font-semibold font-mono text-foreground">{{ avg_filler }}</span>
+        </div>
+    </div>
+</div>
+
+{# Charts (simple bar representation) #}
+<div class="mt-8 grid gap-6 lg:grid-cols-2">
+    <div class="rounded-lg border border-border bg-card p-6">
+        <h2 class="mb-1 text-lg font-semibold text-foreground">Conversations per day</h2>
+        <p class="mb-6 text-xs font-mono text-muted-foreground">Last 7 days</p>
+        <div class="flex h-[220px] items-end gap-2">
+            {% for point in chart_conversations %}
+            <div class="flex flex-1 flex-col items-center gap-2">
+                <span class="text-xs font-mono text-foreground">{{ point.count }}</span>
+                <div class="w-full rounded-t bg-primary" style="height: {% widthratio point.count max_conv 100 %}%; max-height: 100%; min-height: {% if point.count %}4px{% else %}0{% endif %};"></div>
+                <span class="text-xs font-mono text-muted-foreground">{{ point.date }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="rounded-lg border border-border bg-card p-6">
+        <h2 class="mb-1 text-lg font-semibold text-foreground">Filler notes per day</h2>
+        <p class="mb-6 text-xs font-mono text-muted-foreground">Last 7 days</p>
+        <div class="flex h-[220px] items-end gap-2">
+            {% for point in chart_filler %}
+            <div class="flex flex-1 flex-col items-center gap-2">
+                <span class="text-xs font-mono text-foreground">{{ point.count }}</span>
+                <div class="w-full rounded-t bg-info" style="height: {% widthratio point.count max_filler 100 %}%; max-height: 100%; min-height: {% if point.count %}4px{% else %}0{% endif %};"></div>
+                <span class="text-xs font-mono text-muted-foreground">{{ point.date }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

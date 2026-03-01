@@ -20,11 +20,30 @@ local_settings.py
 .env
 .env.local
 staticfiles/
+db.sqlite3
+media/
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
+.DS_Store
 
-client_secret_779839937795-5tk85153v3li07pfacv0tcdfgqmgdofg.apps.googleusercontent.com.json
+# Secrets / credentials
+client_secret_*.json
+*.pem
+
+# Lovable UI reference (clone for implementation, not tracked)
+echo-speak-bloom/
+
+# Tailwind / Node (run npm run build:css in assets/)
+assets/node_modules/
+
+# Internal docs (not for assignment submission)
+docs/lovable-ui-backend-mapping.md
+docs/a5/A5_CHECKLIST.md
+docs/a5/GOOGLE_OAUTH_SETUP.md
+
+# Duplicate Vega-Lite file (submit group-9-vega-lite-API-demo.txt only)
+group-x-vega-lite-API-demo.txt

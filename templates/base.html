@@ -1,37 +1,60 @@
 {% load static %}
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Echolabs</title>
-        <link rel="stylesheet" href="{% static 'css/styles.css' %}" />
-    </head>
-    <body>
-        <header>
-            <div class="container">
-                <h1>Echolabs</h1>
-                <p>Conversation insights and feedback</p>
-                <nav>
-                    <a href="{% url 'home' %}">Home</a>
-                    <a href="{% url 'public_conversations_api_json' %}">Public API</a>
-                    {% if user.is_authenticated %}
-                        <a href="{% url 'conversations_list' %}">Conversations</a>
-                        <a href="{% url 'conversation_analytics' %}">Analytics</a>
-                        <a href="{% url 'conversation_chart' %}">Chart</a>
-                        <a href="{% url 'vega_lite_charts' %}">Vega-Lite Charts</a>
-                        <a href="{% url 'external_api' %}">External API</a>
-                        <a href="{% url 'reports' %}">Reports</a>
-                        <a href="{% url 'account_logout' %}">Logout</a>
-                    {% else %}
-                        <a href="{% url 'account_login' %}">Login</a>
-                        <a href="{% url 'account_signup' %}">Sign up</a>
-                    {% endif %}
-                </nav>
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}EchoLabs{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/lovable.css' %}" />
+</head>
+<body class="min-h-screen bg-background">
+    <header class="sticky top-0 z-50 border-b border-border glass">
+        <div class="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
+            <div class="flex items-center gap-3">
+                <a href="{% url 'home' %}" class="flex h-8 w-8 items-center justify-center rounded-lg gradient-primary">
+                    <svg class="h-4 w-4 text-primary-foreground" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+                </a>
+                <a href="{% url 'home' %}" class="text-lg font-semibold tracking-tight text-foreground">
+                    Echo<span class="text-primary">Labs</span>
+                </a>
             </div>
-        </header>
-        <main class="container">
-            {% block content %}{% endblock %}
-        </main>
-    </body>
+
+            <nav class="flex items-center gap-1">
+                {% if user.is_authenticated %}
+                <a href="{% url 'home' %}" class="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors {% if request.resolver_match.url_name == 'home' %}bg-primary/10 text-primary{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %}">
+                    <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                    <span class="hidden sm:inline">Dashboard</span>
+                </a>
+                <a href="{% url 'progress' %}" class="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors {% if request.resolver_match.url_name == 'progress' %}bg-primary/10 text-primary{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %}">
+                    <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" x2="18" y1="20" y2="10"/><line x1="12" x2="12" y1="20" y2="4"/><line x1="6" x2="6" y1="20" y2="14"/></svg>
+                    <span class="hidden sm:inline">Progress</span>
+                </a>
+                <a href="{% url 'insights' %}" class="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors {% if request.resolver_match.url_name == 'insights' %}bg-primary/10 text-primary{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %}">
+                    <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                    <span class="hidden sm:inline">Insights</span>
+                </a>
+                <a href="{% url 'conversations_list' %}" class="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary">Conversations</a>
+                <a href="{% url 'reports' %}" class="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary">Reports</a>
+                {% endif %}
+            </nav>
+
+            <div class="flex items-center gap-3">
+                {% if user.is_authenticated %}
+                <div class="flex items-center gap-2 rounded-full bg-secondary px-3 py-1.5">
+                    <span class="h-2 w-2 rounded-full bg-success animate-pulse"></span>
+                    <span class="text-xs font-mono text-secondary-foreground">{{ user.get_username }}</span>
+                </div>
+                <a href="{% url 'account_logout' %}" class="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary">Logout</a>
+                {% else %}
+                <a href="{% url 'account_login' %}" class="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary">Login</a>
+                <a href="{% url 'account_signup' %}" class="rounded-lg px-3 py-2 text-sm font-medium bg-primary text-primary-foreground hover:opacity-90">Sign up</a>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+
+    <main class="mx-auto max-w-7xl px-6 py-8">
+        {% block content %}{% endblock %}
+    </main>
+</body>
 </html>
