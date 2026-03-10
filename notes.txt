@@ -1,0 +1,102 @@
+================================================================================
+Part 3: Production Reflection
+================================================================================
+
+1. THE SIZE VS. QUALITY TRADE-OFF
+--------------------------------------------------------------------------------
+
+From our 15-model test (ai_prototype.ipynb), we evaluated five size categories
+on conversation summarization (instruction adherence, speed, relevance, consistency).
+
+SWEET SPOT: Small (200M–500M parameters). The best model was philschmid/
+bart-large-cnn-samsum: excellent quality, ~5.7s latency, no hallucinations.
+
+Was a massive model significantly better? No. Ultra-Light models were fast but
+poor quality. Medium (distilbart-cnn-12-6, flan-t5-large) was either lower quality
+or slower (~11s) with no gain over Small. XL/XXL took minutes per run—not
+acceptable. For 1–2 sentence summarization of informal speech, ~400M params
+was the sweet spot; larger models added cost and latency without better output.
+
+Expected server cost (computation only, ballpark monthly):
+
+| Size       | Example model           | Min RAM   | Est. monthly (24/7) |
+|------------|-------------------------|-----------|----------------------|
+| Ultra-Light| distilbart-cnn-6-6      | ~1–2 GB   | ~$15–30             |
+| Small      | bart-large-cnn-samsum   | ~2–4 GB   | ~$30–60             |
+| Medium     | flan-t5-large           | ~4–8 GB   | ~$60–120            |
+| Large      | flan-t5-xl              | ~8–16 GB  | ~$120–250           |
+| X-Large    | flan-t5-xxl             | 40+ GB    | ~$400–800+ (GPU)    |
+
+Our Small model fits on a modest CPU-only server; Large/X-Large typically need GPU
+for acceptable latency.
+
+
+2. COST & SCALING: 10,000 DAILY USERS
+--------------------------------------------------------------------------------
+
+At 10,000 daily users (assume ~2,000 summaries/day), we would lean toward API
+or hybrid rather than scaling local-only.
+
+Local (scaled): Each inference ~5–6s; handling peaks may need 2–3 instances or
+queues → ~$90–180/month, more ops. Pros: no per-token fee, data on our servers.
+Cons: pay for peak capacity, manual scaling.
+
+Full API: ~2,000 × 60 output tokens/day ≈ ~$20–80/month at typical per-token
+rates. Pros: no server to maintain, pay per use. Cons: data leaves our infra.
+
+| Approach       | Est. monthly (2K summaries/day) | Ops complexity |
+|----------------|---------------------------------|----------------|
+| Local (scaled) | ~$90–180                        | Higher         |
+| Full API       | ~$20–80                         | Lower          |
+
+Conclusion: At this scale, moving to a paid API (or hybrid) can be cheaper
+and simpler than scaling the local model.
+
+
+3. HYBRID POTENTIAL
+--------------------------------------------------------------------------------
+
+Local model + external API can work together to cut cost and keep quality:
+
+• Local summary first, API only for extras: Use local BART for summaries (no
+  per-token); call API only for “action items” or other add-ons so we pay
+  the API for a small, focused use.
+
+• Local as preprocessor: Summarize or truncate with the local model, then send
+  only that to the API for action items → fewer input tokens, lower API cost.
+
+• Tiering: Use local under normal load; fall back to API during spikes so we
+  don’t over-provision servers.
+
+• Quality gate: Default to local; if output fails a simple check, retry with API.
+
+Echolabs today: “Generate summary” → local (no API cost). “Get action items”
+→ external HF Inference (small prompt, limited cost). Bulk of inference stays
+local; API used only for the extra feature.
+
+
+4. COST COMPARISON: PRE-TRAINED ON SERVER VS PAID API
+--------------------------------------------------------------------------------
+
+Server: 16 core CPU, 16 core GPU, 64 GB RAM, 1 TB storage.
+
+Use pre-trained (local) when: Traffic is moderate and predictable; 5–10s
+latency is OK; we want to avoid per-token cost and can pay ~$200–500/month
+fixed; data must stay on our infra; we have DevOps to maintain the server.
+
+Switch to paid API when: Traffic is spiky or low; we need low latency without
+managing GPU; usage is intermittent (e.g. $20–50/month API < 24/7 server); we
+lack ML/DevOps; we want to try multiple providers without self-hosting.
+
+| Factor        | Pre-trained (our server)   | Paid API (comparable)   |
+|---------------|----------------------------|--------------------------|
+| Fixed cost    | ~$200–500/month            | $0 base                  |
+| Variable      | No per-token               | Per token                |
+| Break-even    | Better at >~50K–100K inf/mo| Better below or if spiky |
+| Data location | On our server              | Sent to provider         |
+
+Summary: Use local when we have steady, substantial usage and can afford
+fixed cost and ops. Use API when usage is low/spiky or we want minimal ops
+and pay-per-use.
+
+================================================================================
