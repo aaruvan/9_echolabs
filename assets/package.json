@@ -1,0 +1,14 @@
+{
+  "name": "echolabs-assets",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i src/input.css -o ../static/css/lovable.css --minify",
+    "watch:css": "tailwindcss -i src/input.css -o ../static/css/lovable.css --watch"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.21",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.17",
+    "tailwindcss-animate": "^1.0.7"
+  }
+}

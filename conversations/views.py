@@ -1,9 +1,10 @@
 import csv
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
+from django.utils import timezone
 
 import requests
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
@@ -46,10 +47,56 @@ def conversations_render_view(request):
 
 
 def home_view(request):
+    """Dashboard: recent conversations, metrics, quick insights (Lovable-style)."""
     context = {
         "title": "Echolabs Home",
         "subtitle": "Track conversations, transcripts, and feedback notes.",
     }
+    if request.user.is_authenticated:
+        today = timezone.now().date()
+        conversations = Conversation.objects.filter(user=request.user).order_by("-recorded_at")[:10]
+        conversation_count_today = Conversation.objects.filter(user=request.user, recorded_at__date=today).count()
+        total_conversations = Conversation.objects.filter(user=request.user).count()
+        # Filler count: improvement notes with note_type filler_word (per user's conversations)
+        filler_notes = ImprovementNote.objects.filter(
+            segment__conversation__user=request.user,
+            note_type=ImprovementNote.NoteType.FILLER_WORD,
+        )
+        filler_total = filler_notes.count()
+        avg_filler = round(filler_total / total_conversations, 1) if total_conversations else 0
+        # Recent improvement notes for "quick insights" (last 5)
+        recent_notes = (
+            ImprovementNote.objects.filter(segment__conversation__user=request.user)
+            .select_related("segment", "segment__conversation")
+            .order_by("-created_at")[:5]
+        )
+        conv_list = list(Conversation.objects.filter(user=request.user).order_by("-recorded_at")[:10])
+        filler_by_conv = {}
+        if conv_list:
+            ids = [c.id for c in conv_list]
+            counts = (
+                ImprovementNote.objects.filter(segment__conversation_id__in=ids, note_type=ImprovementNote.NoteType.FILLER_WORD)
+                .values("segment__conversation_id")
+                .annotate(c=Count("id"))
+            )
+            filler_by_conv = {r["segment__conversation_id"]: r["c"] for r in counts}
+        hour = timezone.now().hour
+        if hour < 12:
+            greeting = "morning"
+        elif hour < 18:
+            greeting = "afternoon"
+        else:
+            greeting = "evening"
+        conv_cards = [{"conversation": c, "filler_count": filler_by_conv.get(c.id, 0)} for c in conv_list]
+        context.update({
+            "conversations": conv_list,
+            "conv_cards": conv_cards,
+            "conversation_count_today": conversation_count_today,
+            "total_conversations": total_conversations,
+            "avg_filler": avg_filler,
+            "recent_notes": recent_notes,
+            "greeting": greeting,
+        })
     return render(request, "home.html", context)
 
 
@@ -66,13 +113,39 @@ class ConversationsListView(LoginRequiredMixin, ListView):
     context_object_name = "conversations"
 
     def get_queryset(self):
-        return Conversation.objects.all().order_by("-created_at")
+        return Conversation.objects.filter(user=self.request.user).order_by("-recorded_at")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        conv_list = list(context["conversations"])
+        filler_by_conv = {}
+        if conv_list:
+            ids = [c.id for c in conv_list]
+            counts = (
+                ImprovementNote.objects.filter(segment__conversation_id__in=ids, note_type=ImprovementNote.NoteType.FILLER_WORD)
+                .values("segment__conversation_id")
+                .annotate(c=Count("id"))
+            )
+            filler_by_conv = {r["segment__conversation_id"]: r["c"] for r in counts}
+        context["conv_cards"] = [{"conversation": c, "filler_count": filler_by_conv.get(c.id, 0)} for c in conv_list]
+        return context
 
 
 class ConversationDetailView(LoginRequiredMixin, DetailView):
     model = Conversation
     template_name = "conversations/conversation_detail.html"
     context_object_name = "conversation"
+
+    def get_queryset(self):
+        return super().get_queryset().filter(user=self.request.user)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        conv = context["conversation"]
+        notes = ImprovementNote.objects.filter(segment__conversation=conv).select_related("segment").order_by("segment__segment_order", "note_type")
+        context["improvement_notes"] = list(notes)
+        context["filler_count"] = notes.filter(note_type=ImprovementNote.NoteType.FILLER_WORD).count()
+        return context
 
 
 class ConversationAnalyticsView(LoginRequiredMixin, ListView):
@@ -174,6 +247,7 @@ def conversation_chart_view(request):
 
 
 def public_conversations_api_json(request):
+    """Public API: no login required. CORS enabled so Vega-Lite editor can fetch data."""
     rows = Conversation.objects.values("user__username").annotate(total=Count("id"))
     data = [
         {
@@ -182,7 +256,9 @@ def public_conversations_api_json(request):
         }
         for row in rows
     ]
-    return JsonResponse(data, safe=False)
+    response = JsonResponse(data, safe=False)
+    response["Access-Control-Allow-Origin"] = "*"
+    return response
 
 
 @login_required
@@ -442,3 +518,78 @@ def reports_view(request):
         "by_note_type": by_note_type,
     }
     return render(request, "conversations/reports.html", context)
+
+
+@login_required
+def progress_view(request):
+    """Progress page: stats and charts (conversations + filler over time)."""
+    user = request.user
+    today = timezone.now().date()
+    week_ago = today - timedelta(days=7)
+    convs = Conversation.objects.filter(user=user, recorded_at__date__gte=week_ago).order_by("recorded_at__date")
+    from django.db.models.functions import TruncDate
+    convs_per_day = (
+        convs.annotate(day=TruncDate("recorded_at"))
+        .values("day")
+        .annotate(count=Count("id"))
+        .order_by("day")
+    )
+    filler_per_day = (
+        ImprovementNote.objects.filter(
+            segment__conversation__user=user,
+            note_type=ImprovementNote.NoteType.FILLER_WORD,
+            created_at__date__gte=week_ago,
+        )
+        .annotate(day=TruncDate("created_at"))
+        .values("day")
+        .annotate(count=Count("id"))
+        .order_by("day")
+    )
+    total_conversations = Conversation.objects.filter(user=user).count()
+    total_filler = ImprovementNote.objects.filter(
+        segment__conversation__user=user,
+        note_type=ImprovementNote.NoteType.FILLER_WORD,
+    ).count()
+    avg_filler = round(total_filler / total_conversations, 1) if total_conversations else 0
+    # Build chart-friendly lists (all 7 days)
+    days_order = [week_ago + timedelta(days=i) for i in range(8)]
+    conv_by_day = {r["day"]: r["count"] for r in convs_per_day}
+    filler_by_day = {r["day"]: r["count"] for r in filler_per_day}
+    chart_conversations = [{"date": d.strftime("%a"), "count": conv_by_day.get(d, 0)} for d in days_order]
+    chart_filler = [{"date": d.strftime("%a"), "count": filler_by_day.get(d, 0)} for d in days_order]
+    max_conv = max((c["count"] for c in chart_conversations), default=0) or 1
+    max_filler = max((f["count"] for f in chart_filler), default=0) or 1
+    context = {
+        "total_conversations": total_conversations,
+        "total_filler": total_filler,
+        "avg_filler": avg_filler,
+        "chart_conversations": chart_conversations,
+        "chart_filler": chart_filler,
+        "max_conv": max_conv,
+        "max_filler": max_filler,
+    }
+    return render(request, "conversations/progress.html", context)
+
+
+@login_required
+def insights_view(request):
+    """Insights page: improvement notes by type, recent notes as cards."""
+    user = request.user
+    note_type_labels = dict(ImprovementNote.NoteType.choices)
+    rows = (
+        ImprovementNote.objects.filter(segment__conversation__user=user)
+        .values("note_type")
+        .annotate(count=Count("id"))
+        .order_by("-count")
+    )
+    by_note_type = [{"note_type": r["note_type"], "count": r["count"], "label": note_type_labels.get(r["note_type"], r["note_type"])} for r in rows]
+    recent_notes = (
+        ImprovementNote.objects.filter(segment__conversation__user=user)
+        .select_related("segment", "segment__conversation")
+        .order_by("-created_at")[:12]
+    )
+    context = {
+        "by_note_type": by_note_type,
+        "recent_notes": recent_notes,
+    }
+    return render(request, "conversations/insights.html", context)

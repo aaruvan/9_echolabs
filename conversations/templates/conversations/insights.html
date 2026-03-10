@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block title %}Insights — EchoLabs{% endblock %}
+
+{% block content %}
+<h1 class="text-3xl font-bold tracking-tight text-foreground">
+    AI <span class="gradient-text">Insights</span>
+</h1>
+<p class="mt-2 text-muted-foreground">Improvement notes and feedback from your conversations.</p>
+
+{# By note type #}
+<section class="mt-8">
+    <h2 class="mb-4 text-lg font-semibold text-foreground">Notes by type</h2>
+    <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+        {% for row in by_note_type %}
+        <div class="rounded-lg border border-border bg-card p-5">
+            <span class="metric-label">{{ row.label }}</span>
+            <div class="mt-2 flex items-baseline gap-2">
+                <span class="text-2xl font-semibold font-mono text-foreground">{{ row.count }}</span>
+                <span class="text-sm text-muted-foreground">note{{ row.count|pluralize }}</span>
+            </div>
+        </div>
+        {% empty %}
+        <p class="text-muted-foreground">No improvement notes yet.</p>
+        {% endfor %}
+    </div>
+</section>
+
+{# Recent notes as cards #}
+<section class="mt-10">
+    <h2 class="mb-4 text-lg font-semibold text-foreground">Recent feedback</h2>
+    <div class="grid gap-3 md:grid-cols-2">
+        {% for note in recent_notes %}
+        <div class="rounded-lg border p-5 {% if note.note_type == 'filler_word' %}border-warning/30 bg-warning/5{% elif note.note_type == 'confidence' or note.note_type == 'tone' %}border-success/30 bg-success/5{% else %}border-info/30 bg-info/5{% endif %}">
+            <span class="metric-label">{{ note.get_note_type_display }}</span>
+            <p class="mt-2 text-sm leading-relaxed text-muted-foreground">{{ note.feedback_text }}</p>
+            <p class="mt-2 text-xs font-mono text-muted-foreground">From: {{ note.segment.conversation.title }}</p>
+        </div>
+        {% empty %}
+        <p class="text-muted-foreground">No recent notes.</p>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

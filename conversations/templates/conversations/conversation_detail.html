@@ -1,24 +1,86 @@
 {% extends "base.html" %}
 
+{% block title %}{{ conversation.title }} — EchoLabs{% endblock %}
+
 {% block content %}
-    <div class="card">
-        <h2>{{ conversation.title }}</h2>
-        <p class="meta">
-            Recorded: {{ conversation.recorded_at|date:"Y-m-d H:i" }}
-        </p>
-        <p class="meta">
-            Duration: {{ conversation.duration_seconds|default:"N/A" }} seconds
-        </p>
-        <h3>Transcript Segments</h3>
-        <ul class="list">
-            {% for segment in conversation.segments.all %}
-                <li class="list-item">
-                    <span>Segment {{ segment.segment_order }}</span>
-                    <span class="badge">{{ segment.text|truncatechars:40 }}</span>
-                </li>
-            {% empty %}
-                <li class="list-item empty">No segments yet.</li>
-            {% endfor %}
-        </ul>
+<a href="{% url 'home' %}" class="mb-6 flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
+    <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" x2="5" y1="12" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+    Back to Dashboard
+</a>
+
+<div class="mb-8">
+    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+            <h1 class="text-2xl font-bold text-foreground">{{ conversation.title }}</h1>
+            <p class="mt-1 text-sm font-mono text-muted-foreground">{{ conversation.recorded_at|date:"M j, Y — g:i A" }}</p>
+        </div>
+        <div class="flex h-16 w-16 items-center justify-center rounded-2xl gradient-primary glow-md">
+            <span class="text-2xl font-bold text-primary-foreground">{{ filler_count }}</span>
+        </div>
     </div>
+    <div class="mt-6 rounded-lg border border-border bg-card p-6">
+        <div class="mb-3 flex items-center justify-between">
+            <span class="metric-label">Duration</span>
+            <span class="text-xs font-mono text-muted-foreground">{% if conversation.duration_seconds %}{{ conversation.duration_seconds }}s{% else %}—{% endif %}</span>
+        </div>
+    </div>
+</div>
+
+{# Metrics #}
+<section class="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <div class="rounded-lg border border-border bg-card p-5 glow-sm">
+        <span class="metric-label">Filler words</span>
+        <div class="mt-3 flex items-baseline gap-1.5">
+            <span class="metric-value text-foreground">{{ filler_count }}</span>
+        </div>
+    </div>
+    <div class="rounded-lg border border-border bg-card p-5 glow-sm">
+        <span class="metric-label">Segments</span>
+        <div class="mt-3 flex items-baseline gap-1.5">
+            <span class="metric-value text-foreground">{{ conversation.segments.count }}</span>
+        </div>
+    </div>
+    <div class="rounded-lg border border-border bg-card p-5 glow-sm">
+        <span class="metric-label">Improvement notes</span>
+        <div class="mt-3 flex items-baseline gap-1.5">
+            <span class="metric-value text-foreground">{{ improvement_notes|length }}</span>
+        </div>
+    </div>
+</section>
+
+<div class="grid gap-8 lg:grid-cols-5">
+    {# Transcript + Timeline (segments) #}
+    <div class="space-y-6 lg:col-span-3">
+        <div class="rounded-lg border border-border bg-card p-6">
+            <h2 class="mb-4 text-lg font-semibold text-foreground">Transcript</h2>
+            <div class="space-y-3">
+                {% for segment in conversation.segments.all %}
+                <div class="flex gap-3">
+                    <span class="mt-0.5 shrink-0 text-xs font-mono text-muted-foreground w-10">#{{ segment.segment_order }}</span>
+                    <p class="text-sm text-foreground">{{ segment.text }}</p>
+                </div>
+                {% empty %}
+                <p class="text-sm text-muted-foreground">No transcript segments yet.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    {# AI Insights (improvement notes) #}
+    <div class="space-y-6 lg:col-span-2">
+        <div class="rounded-lg border border-border bg-card p-6">
+            <h2 class="mb-4 text-lg font-semibold text-foreground">Improvement Notes</h2>
+            <div class="space-y-3">
+                {% for note in improvement_notes %}
+                <div class="rounded-lg border p-4 {% if note.note_type == 'filler_word' %}border-warning/30 bg-warning/5{% elif note.note_type == 'confidence' or note.note_type == 'tone' %}border-success/30 bg-success/5{% else %}border-info/30 bg-info/5{% endif %}">
+                    <span class="metric-label">{{ note.get_note_type_display }}</span>
+                    <p class="mt-2 text-sm leading-relaxed text-muted-foreground">{{ note.feedback_text }}</p>
+                </div>
+                {% empty %}
+                <p class="text-sm text-muted-foreground">No improvement notes for this conversation.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}

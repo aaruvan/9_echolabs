@@ -1,21 +1,38 @@
 {% extends "base.html" %}
 {% load socialaccount %}
+{% load auth_extra %}
+
+{% block title %}Login — EchoLabs{% endblock %}
 
 {% block content %}
-    <div class="card">
-        <h2>Login</h2>
-        <p class="meta">Use your username/email and password.</p>
-        <form method="post" action="{% url 'account_login' %}">
+<div class="mx-auto max-w-md">
+    <h1 class="text-2xl font-bold tracking-tight text-foreground">Login</h1>
+    <p class="mt-1 metric-label">Use your username/email and password.</p>
+
+    <div class="mt-6 rounded-lg border border-border bg-card p-6">
+        <form method="post" action="{% url 'account_login' %}" class="auth-form space-y-4">
             {% csrf_token %}
             {{ form.as_p }}
             {% if redirect_field_value %}
                 <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}" />
             {% endif %}
-            <button type="submit">Login</button>
+            <button type="submit" class="w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90">
+                Log in
+            </button>
         </form>
-        <hr />
-        <a href="{% provider_login_url 'google' %}">
-            Continue with Google
-        </a>
+
+        <div class="mt-6 border-t border-border pt-6">
+            <p class="mb-3 metric-label">Or</p>
+            {% if is_google_oauth_configured %}
+            <a href="{% provider_login_url 'google' %}" class="flex items-center justify-center gap-2 rounded-lg border border-border bg-secondary px-4 py-2.5 text-sm font-medium text-foreground hover:bg-secondary/80">
+                Continue with Google
+            </a>
+            {% else %}
+            <a href="#" class="flex items-center justify-center gap-2 rounded-lg border border-border bg-secondary px-4 py-2.5 text-sm font-medium text-foreground hover:bg-secondary/80">
+                Continue with Google
+            </a>
+            {% endif %}
+        </div>
     </div>
+</div>
 {% endblock %}
