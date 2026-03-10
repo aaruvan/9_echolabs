@@ -49,7 +49,7 @@
 </section>
 
 <div class="grid gap-8 lg:grid-cols-5">
-    {# Transcript + Timeline (segments) #}
+    {# Transcript + AI Summary & Action items #}
     <div class="space-y-6 lg:col-span-3">
         <div class="rounded-lg border border-border bg-card p-6">
             <h2 class="mb-4 text-lg font-semibold text-foreground">Transcript</h2>
@@ -62,6 +62,30 @@
                 {% empty %}
                 <p class="text-sm text-muted-foreground">No transcript segments yet.</p>
                 {% endfor %}
+            </div>
+        </div>
+        {# Local LLM summary #}
+        <div class="rounded-lg border border-border bg-card p-6">
+            <h2 class="mb-4 text-lg font-semibold text-foreground">AI Summary</h2>
+            <p class="mb-3 text-sm text-muted-foreground">Summarize this conversation using the local Hugging Face model.</p>
+            <button type="button" id="btn-summary" class="rounded-lg border border-border bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
+                Generate summary
+            </button>
+            <div id="summary-result" class="mt-4 hidden rounded-lg border border-border bg-muted/30 p-4">
+                <p id="summary-text" class="text-sm text-foreground"></p>
+                <p id="summary-error" class="text-sm text-destructive hidden"></p>
+            </div>
+        </div>
+        {# External API: action items #}
+        <div class="rounded-lg border border-border bg-card p-6">
+            <h2 class="mb-4 text-lg font-semibold text-foreground">Action items</h2>
+            <p class="mb-3 text-sm text-muted-foreground">Generate action items using the Hugging Face Inference API.</p>
+            <button type="button" id="btn-action-items" class="rounded-lg border border-border bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
+                Get action items
+            </button>
+            <div id="action-items-result" class="mt-4 hidden rounded-lg border border-border bg-muted/30 p-4">
+                <p id="action-items-text" class="text-sm text-foreground whitespace-pre-wrap"></p>
+                <p id="action-items-error" class="text-sm text-destructive hidden"></p>
             </div>
         </div>
     </div>
@@ -83,4 +107,77 @@
         </div>
     </div>
 </div>
+
+{% csrf_token %}
+<script>
+(function() {
+    const summaryUrl = "{% url 'api_summarize_conversation' conversation.pk %}";
+    const actionItemsUrl = "{% url 'api_action_items' %}";
+    const csrfToken = document.querySelector("[name=csrfmiddlewaretoken]")?.value || "";
+
+    document.getElementById("btn-summary").addEventListener("click", async function() {
+        const btn = this;
+        const resultEl = document.getElementById("summary-result");
+        const textEl = document.getElementById("summary-text");
+        const errEl = document.getElementById("summary-error");
+        resultEl.classList.remove("hidden");
+        textEl.classList.add("hidden");
+        errEl.classList.add("hidden");
+        btn.disabled = true;
+        btn.textContent = "Generating…";
+        try {
+            const r = await fetch(summaryUrl, { headers: { "Accept": "application/json" } });
+            const data = await r.json();
+            if (r.ok) {
+                textEl.textContent = data.summary || "";
+                textEl.classList.remove("hidden");
+            } else {
+                errEl.textContent = data.error || data.detail || "Request failed";
+                errEl.classList.remove("hidden");
+            }
+        } catch (e) {
+            errEl.textContent = e.message || "Request failed";
+            errEl.classList.remove("hidden");
+        }
+        btn.disabled = false;
+        btn.textContent = "Generate summary";
+    });
+
+    document.getElementById("btn-action-items").addEventListener("click", async function() {
+        const btn = this;
+        const resultEl = document.getElementById("action-items-result");
+        const textEl = document.getElementById("action-items-text");
+        const errEl = document.getElementById("action-items-error");
+        resultEl.classList.remove("hidden");
+        textEl.classList.add("hidden");
+        errEl.classList.add("hidden");
+        btn.disabled = true;
+        btn.textContent = "Generating…";
+        try {
+            const r = await fetch(actionItemsUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": csrfToken,
+                    "Accept": "application/json"
+                },
+                body: JSON.stringify({ conversation_id: {{ conversation.pk }} })
+            });
+            const data = await r.json();
+            if (r.ok) {
+                textEl.textContent = data.action_items || "";
+                textEl.classList.remove("hidden");
+            } else {
+                errEl.textContent = data.error || data.detail || "Request failed";
+                errEl.classList.remove("hidden");
+            }
+        } catch (e) {
+            errEl.textContent = e.message || "Request failed";
+            errEl.classList.remove("hidden");
+        }
+        btn.disabled = false;
+        btn.textContent = "Get action items";
+    });
+})();
+</script>
 {% endblock %}

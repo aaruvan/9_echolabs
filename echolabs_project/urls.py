@@ -19,6 +19,8 @@ from django.contrib import admin
 from django.urls import include, path
 
 from conversations.views import (
+    api_action_items,
+    api_summarize_conversation,
     api_summary,
     conversations_api_json,
     conversations_api_text,
@@ -51,6 +53,8 @@ urlpatterns = [
     path("vega-lite/chart2.jpg", vega_lite_chart2_jpg, name="vega_lite_chart2_jpg"),
     # API routes
     path("api/summary/", api_summary, name="api_summary"),
+    path("api/summarize/<int:pk>/", api_summarize_conversation, name="api_summarize_conversation"),
+    path("api/action-items/", api_action_items, name="api_action_items"),
     path("api/conversations/", conversations_api_json, name="conversations_api_json"),
     path(
         "api/conversations.txt",

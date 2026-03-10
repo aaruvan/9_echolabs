@@ -47,3 +47,8 @@ docs/a5/GOOGLE_OAUTH_SETUP.md
 
 # Duplicate Vega-Lite file (submit group-9-vega-lite-API-demo.txt only)
 group-x-vega-lite-API-demo.txt
+
+# Model weights (do not push to GitHub)
+*.bin
+*.safetensors
+*.pt

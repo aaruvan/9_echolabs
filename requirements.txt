@@ -7,3 +7,7 @@ Pillow
 django-allauth
 PyJWT
 cryptography
+torch
+transformers
+sentencepiece
+accelerate

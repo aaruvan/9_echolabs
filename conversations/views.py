@@ -1,18 +1,21 @@
 import csv
 import io
+import json
+import os
 from datetime import datetime, timedelta
 from django.utils import timezone
 
 import requests
 from django.db.models import Count, Q
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views import View
 from django.views.generic import DetailView, ListView
 
 from .models import Conversation, ImprovementNote, TranscriptSegment
+from .summarize import summarize_transcript
 
 
 @login_required
@@ -314,6 +317,93 @@ def api_summary(request):
         for row in rows
     ]
     return JsonResponse(data, safe=False)
+
+
+def _transcript_for_conversation(conversation):
+    """Build full transcript text from conversation segments."""
+    segments = conversation.segments.order_by("segment_order")
+    return " ".join(s.text for s in segments if s.text)
+
+
+@login_required
+def api_summarize_conversation(request, pk):
+    """
+    Local LLM: summarize a conversation's transcript using Hugging Face
+    bart-large-cnn-samsum (transformers). GET or POST with conversation id.
+    """
+    if request.method not in ("GET", "POST"):
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    conversation = get_object_or_404(Conversation, pk=pk)
+    if conversation.user_id != request.user.id:
+        return JsonResponse({"error": "Not allowed"}, status=403)
+    transcript = _transcript_for_conversation(conversation)
+    if not transcript.strip():
+        return JsonResponse({"error": "No transcript to summarize", "summary": ""})
+    try:
+        summary = summarize_transcript(transcript)
+        return JsonResponse({"summary": summary})
+    except Exception as e:
+        return JsonResponse(
+            {"error": "Summarization failed", "detail": str(e)},
+            status=500,
+        )
+
+
+@login_required
+def api_action_items(request):
+    """
+    External AI: generate action items from conversation text using
+    Hugging Face Inference API. POST with conversation_id or text.
+    Requires HF_TOKEN in .env for Hugging Face Inference API.
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    text = None
+    if request.content_type and "application/json" in request.content_type:
+        try:
+            body = json.loads(request.body)
+            conversation_id = body.get("conversation_id")
+            text = body.get("text", "").strip()
+            if conversation_id and not text:
+                conv = get_object_or_404(Conversation, pk=conversation_id)
+                if conv.user_id != request.user.id:
+                    return JsonResponse({"error": "Not allowed"}, status=403)
+                text = _transcript_for_conversation(conv)
+        except (ValueError, KeyError):
+            pass
+    if not text or len(text) > 4000:
+        return JsonResponse(
+            {"error": "Provide JSON body with conversation_id or text (max 4000 chars)"},
+            status=400,
+        )
+    api_key = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
+    if not api_key:
+        return JsonResponse(
+            {"error": "HF_TOKEN not configured. Add it to .env for Hugging Face Inference API."},
+            status=503,
+        )
+    prompt = f"List 3 action items from the following text in short bullet points:\n\n{text[:2000]}"
+    try:
+        r = requests.post(
+            "https://api-inference.huggingface.co/models/google/flan-t5-base",
+            headers={"Authorization": f"Bearer {api_key}"},
+            json={"inputs": prompt, "parameters": {"max_new_tokens": 80}},
+            timeout=30,
+        )
+        r.raise_for_status()
+        data = r.json()
+        if isinstance(data, list) and len(data) and "generated_text" in data[0]:
+            action_items = data[0]["generated_text"].strip()
+        elif isinstance(data, dict) and "generated_text" in data:
+            action_items = data["generated_text"].strip()
+        else:
+            action_items = str(data) if data else "No action items generated."
+        return JsonResponse({"action_items": action_items})
+    except requests.RequestException as e:
+        return JsonResponse(
+            {"error": "External API request failed", "detail": str(e)},
+            status=502,
+        )
 
 
 @login_required
