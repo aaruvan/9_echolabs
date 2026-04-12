@@ -132,7 +132,8 @@
                 textEl.textContent = data.summary || "";
                 textEl.classList.remove("hidden");
             } else {
-                errEl.textContent = data.error || data.detail || "Request failed";
+                const parts = [data.error, data.detail].filter(Boolean);
+                errEl.textContent = parts.length ? parts.join(" — ") : "Request failed";
                 errEl.classList.remove("hidden");
             }
         } catch (e) {
@@ -168,7 +169,8 @@
                 textEl.textContent = data.action_items || "";
                 textEl.classList.remove("hidden");
             } else {
-                errEl.textContent = data.error || data.detail || "Request failed";
+                const parts = [data.error, data.detail].filter(Boolean);
+                errEl.textContent = parts.length ? parts.join(" — ") : "Request failed";
                 errEl.classList.remove("hidden");
             }
         } catch (e) {

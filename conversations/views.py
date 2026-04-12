@@ -14,8 +14,24 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views import View
 from django.views.generic import DetailView, ListView
 
+from . import coach_search
+from .forms import CoachSearchForm
 from .models import Conversation, ImprovementNote, TranscriptSegment
 from .summarize import summarize_transcript
+
+
+def _hf_inference_error_message(data) -> str | None:
+    """Extract error text from Hugging Face Inference JSON body when present."""
+    if isinstance(data, dict):
+        err = data.get("error")
+        if err is not None:
+            return err if isinstance(err, str) else str(err)[:800]
+    if isinstance(data, list) and data:
+        first = data[0]
+        if isinstance(first, dict) and "error" in first:
+            e = first["error"]
+            return e if isinstance(e, str) else str(e)[:800]
+    return None
 
 
 @login_required
@@ -390,14 +406,39 @@ def api_action_items(request):
             json={"inputs": prompt, "parameters": {"max_new_tokens": 80}},
             timeout=30,
         )
-        r.raise_for_status()
-        data = r.json()
+        try:
+            data = r.json()
+        except ValueError:
+            data = {}
+
+        if not r.ok:
+            detail = _hf_inference_error_message(data) or (
+                (r.text or "")[:500] if r.text else r.reason or "Unknown error"
+            )
+            status = r.status_code if 400 <= r.status_code < 600 else 502
+            return JsonResponse(
+                {"error": "Hugging Face Inference returned an error", "detail": detail},
+                status=status,
+            )
+
+        hf_err = _hf_inference_error_message(data)
+        if hf_err:
+            return JsonResponse(
+                {"error": "Hugging Face Inference unavailable", "detail": hf_err},
+                status=503,
+            )
+
         if isinstance(data, list) and len(data) and "generated_text" in data[0]:
             action_items = data[0]["generated_text"].strip()
         elif isinstance(data, dict) and "generated_text" in data:
             action_items = data["generated_text"].strip()
         else:
             action_items = str(data) if data else "No action items generated."
+        if not action_items:
+            return JsonResponse(
+                {"error": "Empty response from model", "action_items": ""},
+                status=502,
+            )
         return JsonResponse({"action_items": action_items})
     except requests.RequestException as e:
         return JsonResponse(
@@ -663,7 +704,7 @@ def progress_view(request):
 
 @login_required
 def insights_view(request):
-    """Insights page: improvement notes by type, recent notes as cards."""
+    """Insights page: improvement notes, recent cards, and semantic coach search (A8)."""
     user = request.user
     note_type_labels = dict(ImprovementNote.NoteType.choices)
     rows = (
@@ -678,8 +719,30 @@ def insights_view(request):
         .select_related("segment", "segment__conversation")
         .order_by("-created_at")[:12]
     )
+
+    coach_form = CoachSearchForm()
+    coach_results = None
+    coach_no_match = None
+    coach_error = None
+
+    if request.method == "POST":
+        coach_form = CoachSearchForm(request.POST)
+        if coach_form.is_valid():
+            try:
+                coach_results, coach_no_match = coach_search.search(
+                    coach_form.cleaned_data["query"]
+                )
+            except ValueError as e:
+                coach_error = str(e)
+            except Exception as e:
+                coach_error = f"Search could not run: {e}"
+
     context = {
         "by_note_type": by_note_type,
         "recent_notes": recent_notes,
+        "coach_form": coach_form,
+        "coach_results": coach_results,
+        "coach_no_match": coach_no_match,
+        "coach_error": coach_error,
     }
     return render(request, "conversations/insights.html", context)

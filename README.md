@@ -186,6 +186,12 @@ All A5 features are implemented and working locally. Production deployment was b
 
 ## View URLs (A5)
 - `/accounts/login/` and `/accounts/signup/`
-- Protected: `/conversations/`, `/conversations/analytics/`, `/conversations/chart/`, `/reports/`, `/vega-lite/`, `/external/`
+- Protected: `/conversations/`, `/conversations/analytics/`, `/conversations/chart/`, `/insights/`, `/progress/`, `/reports/`, `/vega-lite/`, `/external/`
 - Protected APIs: `/api/conversations/`, `/api/conversations.txt`, `/api/summary/`
 - Public API: `/api/public/conversations/`
+
+## A9 – AI in Django (local + optional API)
+
+- **Local summarization:** conversation detail → “Generate summary” (`/api/summarize/<id>/`). Uses Hugging Face `transformers` (weights download on first use).
+- **Optional action items:** same page → Hugging Face Inference API; set `HF_TOKEN` in `.env`.
+- **Local semantic coach search:** `/insights/` POST form → `sentence-transformers` retrieval over `conversations/data/coach_knowledge.md`. See [README_AI.md](README_AI.md) for the full workflow and guardrails.

@@ -6,7 +6,8 @@ This document describes the AI workflow, data flow, and safety measures for the 
 
 - **Conversations** are stored in the database: each `Conversation` has a user, title, `recorded_at`, and optional `duration_seconds`.
 - **Transcript text** comes from `TranscriptSegment` records: each segment has `text` and `segment_order`. The full transcript sent to the LLM is built by concatenating segment text in order (see “Preprocessing” below).
-- **Where it’s captured**: Users open a conversation’s detail page (`/conversations/<id>/`). They trigger “Generate summary” (local model) or “Get action items” (external API) via buttons. The backend reads the conversation’s segments from the database; no free-text input is required from the user for these two features.
+- **Where it’s captured**: Users open a conversation’s detail page (`/conversations/<id>/`). They trigger “Generate summary” (local model) or “Get action items” (external API) via buttons. The backend reads the conversation’s segments from the database; no free-text input is required from the user for those two features.
+- **Coach search (semantic retrieval)**: On **Insights** (`/insights/`), users type a **query** in a form and submit. The backend embeds the query with `sentence-transformers` and ranks passages from `conversations/data/coach_knowledge.md` (no database transcript for this feature).
 
 ## Preprocessing
 
@@ -22,13 +23,17 @@ This document describes the AI workflow, data flow, and safety measures for the 
   - Transcript is truncated to 2000 characters before being sent to the API.  
   - Request body is limited to 4000 characters for the `text` field when using the JSON API.
 
+- **Coach search (sentence-transformers)**  
+  - The knowledge file is split on blank lines into paragraphs; markdown heading lines (`# …`) are skipped; long paragraphs are split by word count so each chunk stays within a bounded size.  
+  - The user query is stripped and capped at 500 characters before embedding.
+
 ## Safety Guardrails
 
 - **Authorization**: Only the conversation owner can request a summary or action items for that conversation (user id is checked in `api_summarize_conversation` and `api_action_items`).
 - **Input limits**: Transcript length is capped (2000 chars for local model, 2000 for external prompt, 4000 for API `text`). This reduces risk of excessive load and avoids oversized payloads.
 - **Errors**: If the local model or external API fails, the views return JSON with an `error` (and optional `detail`) instead of raising. The UI shows the error message so users see a clear fallback instead of a broken response.
 - **Secrets**: API keys (e.g. `HF_TOKEN` for Hugging Face Inference) are read from the environment (e.g. `.env`) and are not committed to the repo (`.env` is in `.gitignore`).
-- **No arbitrary user prompts**: The two AI features use fixed prompts (summarization and action-item extraction). User-supplied free text is not passed directly as the sole prompt, which limits prompt-injection surface.
+- **No arbitrary user prompts**: Summarization and action-item extraction use fixed prompts around transcript text; user text is not the sole system prompt, which limits prompt-injection surface. Coach search uses the user query only for **similarity matching** against a fixed corpus (retrieval), not as raw instructions to a generative model.
 
 ## Local LLM Integration
 
@@ -49,3 +54,36 @@ This document describes the AI workflow, data flow, and safety measures for the 
 |-----------------|--------------------------|-----------------------------------|-----------------------------------------|
 | Local summary   | `TranscriptSegment.text` | Join by order, normalize, truncate| Owner-only, length cap, error handling  |
 | Action items    | Same transcript or body  | Truncate, fixed prompt            | Owner-only, length cap, HF token in .env |
+| Coach search    | Form `query` on `/insights/` | Strip, max 500 chars; chunk corpus | Local embeddings only; no-match threshold; form errors |
+
+## How prior assignments informed this build (A9)
+
+### A6 — Model exploration (`llm-test/ai_prototype.ipynb`)
+
+We benchmarked multiple Hugging Face seq2seq models on realistic conversation transcripts (BART and Flan-T5 families across size tiers). For **EchoLabs summarization**, `philschmid/bart-large-cnn-samsum` consistently produced short, faithful summaries of dialogue-style text compared with more generic CNN checkpoints, so it became the **production generative model** loaded in `conversations/summarize.py`.
+
+### A7 — Performance, latency, and quality (`multimodel-system-test/`)
+
+A7 added structured prompts, self-scored quality, and tokens/sec style observations across the same model families. The takeaway for Django: **smaller models** (e.g. Flan-T5-base) are attractive for latency when calling an **external** API (action items), while the **local** path tolerates a slightly heavier BART variant because it runs once per server process and is cached after the first load. Cost and routing notes in `multimodel-system-test/system_design.md` motivated keeping **summarization local** and **action items on Hugging Face Inference** as an optional second feature.
+
+### A8 — Retrieval and embeddings (`rag-pipeline/`)
+
+The RAG notebook compared **chunking strategies**, **three embedding sizes**, and **top-k retrieval** before generation. For the web app we port the **retrieval slice** of that pipeline: **sentence-transformers** over a small **on-disk coaching corpus** (`conversations/data/coach_knowledge.md`), **cosine similarity**, **top-k** results, and a **minimum similarity threshold** so the UI can show a clear “no good matches” state instead of irrelevant filler. Chunking follows **paragraph units** aligned with the “complete thought per chunk” rule from A8. The **medium** embedding model `sentence-transformers/multi-qa-mpnet-base-cos-v1` matches the A8 “medium” tier used in experiments (see `rag_system.ipynb` / `rag_analysis.md`).
+
+### Semantic coach search (local — A8 in Django)
+
+**Implemented:** **POST form on `/insights/`** → `insights_view` → `CoachSearchForm` → `conversations/coach_search.py`.
+
+**Corpus:** `conversations/data/coach_knowledge.md` (paragraph-separated coaching passages for EchoLabs).
+
+**Pipeline:** **sentence-transformers** (`multi-qa-mpnet-base-cos-v1`, same medium tier as `rag-pipeline/rag_system.ipynb`) embeds the query and all chunks; **cosine similarity** ranks passages; **top-k** with a **minimum score** (`MIN_SCORE` in code) returns either ranked passages with scores in the template or a clear **no retrieved results** message. Uses **only** local open weights (no paid API).
+
+### Guardrails (summary)
+
+| Case | Behavior |
+|------|-----------|
+| Empty transcript (summary / action items) | JSON error or empty-state message in UI |
+| Empty or whitespace-only coach query | Form validation error on `/insights/` |
+| No chunks above similarity cutoff | User-visible message on `/insights/`; no invented passages |
+| HF Inference errors | HTTP status preserved; JSON includes `detail` from HF `error` when present |
+| Oversized inputs | Character limits on transcript, API body, and coach query |

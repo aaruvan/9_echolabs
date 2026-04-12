@@ -8,6 +8,45 @@
 </h1>
 <p class="mt-2 text-muted-foreground">Improvement notes and feedback from your conversations.</p>
 
+{# Semantic coach search (local sentence-transformers, A8-style retrieval) #}
+<section class="mt-10 rounded-lg border border-border bg-card p-6">
+    <h2 class="mb-2 text-lg font-semibold text-foreground">Coach knowledge search</h2>
+    <p class="mb-4 text-sm text-muted-foreground">
+        Ask in your own words; we retrieve the closest passages from the on-device coaching corpus (no paid API).
+        First search may take a moment while the embedding model downloads.
+    </p>
+    <form method="post" action="{% url 'insights' %}" class="space-y-4">
+        {% csrf_token %}
+        <div>
+            <label for="id_query" class="mb-1 block text-sm font-medium text-foreground">{{ coach_form.query.label }}</label>
+            {{ coach_form.query }}
+            {% if coach_form.query.errors %}
+            <p class="mt-1 text-sm text-destructive">{{ coach_form.query.errors.0 }}</p>
+            {% endif %}
+        </div>
+        <button type="submit" class="rounded-lg border border-border bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
+            Search
+        </button>
+    </form>
+    {% if coach_error %}
+    <p class="mt-4 text-sm text-destructive">{{ coach_error }}</p>
+    {% endif %}
+    {% if coach_no_match %}
+    <p class="mt-4 rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">{{ coach_no_match }}</p>
+    {% endif %}
+    {% if coach_results %}
+    <div class="mt-4 space-y-4">
+        <h3 class="text-sm font-semibold text-foreground">Top matches</h3>
+        {% for row in coach_results %}
+        <div class="rounded-lg border border-border bg-muted/20 p-4">
+            <p class="text-xs font-mono text-muted-foreground mb-2">Similarity {{ row.score }}</p>
+            <p class="text-sm leading-relaxed text-foreground">{{ row.text }}</p>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</section>
+
 {# By note type #}
 <section class="mt-8">
     <h2 class="mb-4 text-lg font-semibold text-foreground">Notes by type</h2>

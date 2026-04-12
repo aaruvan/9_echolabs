@@ -11,3 +11,6 @@ torch
 transformers
 sentencepiece
 accelerate
+sentence-transformers
+numpy
+scikit-learn
