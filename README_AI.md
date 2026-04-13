@@ -87,3 +87,130 @@ The RAG notebook compared **chunking strategies**, **three embedding sizes**, an
 | No chunks above similarity cutoff | User-visible message on `/insights/`; no invented passages |
 | HF Inference errors | HTTP status preserved; JSON includes `detail` from HF `error` when present |
 | Oversized inputs | Character limits on transcript, API body, and coach query |
+
+
+# PART-2
+
+## Step 2.1: AI Workflow Write-Up
+
+Echolabs integrates two AI features into the Django application:
+
+### Feature 1: Summarization
+
+1. **User Input:** The user navigates to a conversation detail page and clicks "Generate Summary." This triggers a GET request to the summarization API with the conversation's primary key.
+
+2. **Preprocessing:** The backend calls `_transcript_for_conversation(conversation)`, which queries all `TranscriptSegment` objects linked to the conversation, orders them by `segment_order`, and joins their `.text` fields into a single string with spaces.
+
+3. **Model Used:** `facebook/bart-large-cnn-samsum` via Hugging Face `transformers` (loaded locally via `summarize.py`). The model runs entirely on the local machine — no external API call is made.
+
+4. **Output Generation:** The transcript text is passed to `summarize_transcript(transcript)`. The model produces an abstractive summary of the conversation.
+
+5. **Response:** The view returns a `JsonResponse({"summary": summary})` which the frontend JavaScript on the detail page renders inline on the page.
+
+
+### Feature 2: Semantic Coach Search 
+**Endpoint:** `POST /insights/`
+
+1. **User Input:** The user types a natural-language query into the coach search form on the `/insights/` page (e.g., "how do I reduce filler words?"). The form is submitted via POST.
+
+2. **Preprocessing:** The query is validated — empty queries and queries over 500 characters are rejected with a clear error message. The query string is passed to `coach_search.search(query)`.
+
+3. **Knowledge Base + Embedding:** `coach_search.py` reads `conversations/data/coach_knowledge.md`, splits it into paragraphs (with a max of 220 words per chunk), and embeds all chunks using `sentence-transformers/multi-qa-mpnet-base-cos-v1`. Embeddings are cached in memory after the first load so subsequent queries are fast. The user's query is also embedded using the same model.
+
+4. **Retrieval:** Cosine similarity is computed between the query embedding and all chunk embeddings using `sklearn.metrics.pairwise.cosine_similarity`. The top 5 results are considered, and any chunk scoring below 0.28 (the `MIN_SCORE` threshold) is filtered out.
+
+5. **Response:** Matching chunks and their similarity scores are returned to `insights_view`, which passes them to the `conversations/insights.html` template for display. If no chunks clear the threshold, a `coach_no_match` message is shown instead.
+
+---
+
+## Step 2.2: Architecture Explanation
+
+### Feature 1: Summarization
+
+```
+User (clicks "Generate Summary" on detail page)
+        |
+        v
+Django View: api_summarize_conversation
+        |
+        |--> _transcript_for_conversation(conversation)
+        |         Queries TranscriptSegment objects
+        |         Joins text in order → full transcript string
+        |
+        |--> summarize_transcript(transcript)   [summarize.py]
+        |         Loads facebook/bart-large-cnn-samsum via transformers
+        |         Runs local inference on CPU/GPU
+        |
+        v
+JsonResponse({"summary": "..."})
+        |
+        v
+JavaScript on conversation_detail.html renders summary inline
+```
+
+### Feature 2: Semantic Coach Search (RAG-style)
+
+```
+User (types query into CoachSearchForm on /insights/)
+        |
+        v
+Django View: insights_view(request)  [POST]
+        |
+        |--> CoachSearchForm validation
+        |         Rejects empty or >500 character queries
+        |
+        |--> coach_search.search(query)
+        |         |
+        |         |--> _ensure_index()
+        |         |       Reads coach_knowledge.md
+        |         |       Splits into paragraphs (≤220 words)
+        |         |       Embeds all chunks with multi-qa-mpnet-base-cos-v1
+        |         |       Caches embeddings in memory
+        |         |
+        |         |--> Embeds user query (same model)
+        |         |
+        |         |--> cosine_similarity(query_emb, chunk_embeddings)
+        |         |
+        |         |--> Filters top-5 results by MIN_SCORE = 0.28
+        |         |
+        |         v
+        |     Returns (results: List[{text, score}], no_match_msg)
+        |
+        v
+insights.html renders matched passages or no-match message
+```
+
+---
+
+## Step 2.3: Model Selection Rationale
+
+### Summarization Model: `facebook/bart-large-cnn-samsum`
+
+**Selected model:** `facebook/bart-large-cnn-samsum`
+
+**Why this model:** This model was fine-tuned specifically on the SAMSum dataset, which consists of real dialogue and conversation transcripts — exactly the type of content Echolabs processes. It produces abstractive summaries rather than just extracting sentences, which gives more natural and readable output for coaching conversations.
+
+**Alternatives considered (from A6/A7):**
+- `t5-small` and `flan-t5-base` were tested in earlier assignments. Both are faster and lighter, but produce lower-quality summaries for dialogue-style input. The outputs tended to be fragmented or miss the main point especially for larger transcripts
+- `facebook/bart-large-cnn` (without samsum fine-tuning) was tested in A6 and scored 7/10 on summarization but echoed the prompt verbatim on every other task type (action extraction, sentiment, topic labeling), confirming it is only useful for news-style summarization, not conversational input.
+- The Hugging Face Inference API with `flan-t5-base` is used for the optional action items feature (`/api/action_items/`) but was explicitly kept secondary — the primary summarization feature runs locally with no API dependency.
+- `sshleifer/distilbart-cnn-12-6` was the fastest model tested in A6 (~3.28s avg, 28–30 tok/s) and scored 9/10 on summarization in A7, but scored 0 on sentiment, topic labeling, and structured output — making it unreliable for anything beyond basic summarization. It was rejected in favor of a more broadly capable model.
+- `facebook/bart-large-xsum` hallucinated entirely unrelated content on all five prompt types in A7 and was immediately eliminated.
+
+
+**Why it fits the app:** Echolabs is built around conversation analysis and coaching feedback. A model fine-tuned on dialogue summarization directly aligns with that use case. Based on latency tests in A7, `bart-large-cnn-samsum` showed acceptable inference time (~2–4s on CPU for typical transcript lengths) with noticeably higher summary quality than smaller models.
+
+
+### Retrieval / Embedding Model: `sentence-transformers/multi-qa-mpnet-base-cos-v1`
+ 
+**Selected model:** `sentence-transformers/multi-qa-mpnet-base-cos-v1`
+ 
+**Why this model:** This model was specifically trained for semantic search and question-answering retrieval tasks — it is designed to match queries to relevant passages, not just find lexically similar text. The `cos-v1` suffix indicates it produces normalized embeddings optimized for cosine similarity, which is exactly the similarity metric used in the retrieval pipeline.
+ 
+**Alternatives considered (from A8):**
+- `multi-qa-MiniLM-L6-cos-v1` (small, 384d) was tested as the lightweight baseline in A8. It was faster but achieved a lower average context quality score (2.33) and answer quality (1.47) across the 45-run experiment.
+- `BAAI/bge-large-en-v1.5` (large, 1024d) was the best performing model in A8 (context quality 2.87, answer quality 1.73) but was rejected for the Django integration because it is significantly heavier to load and hold in memory, making it unsuitable for a synchronous web request on a local machine.
+- The medium model `multi-qa-mpnet-base-cos-v1` was selected as the practical balance — lighter than BGE-large while still purpose-built for query-passage retrieval tasks.
+ 
+**Why it fits the app:** The coach search feature is a question-answering retrieval task — users ask coaching questions and the system finds relevant advice passages. The `multi-qa` family is purpose-built for exactly this pattern, and the medium tier offers acceptable quality without the memory overhead of the large model.
+ 
