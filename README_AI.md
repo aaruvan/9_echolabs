@@ -109,7 +109,6 @@ Echolabs integrates two AI features into the Django application:
 
 
 ### Feature 2: Semantic Coach Search 
-**Endpoint:** `POST /insights/`
 
 1. **User Input:** The user types a natural-language query into the coach search form on the `/insights/` page (e.g., "how do I reduce filler words?"). The form is submitted via POST.
 
