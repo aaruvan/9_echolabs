@@ -43,6 +43,12 @@ class TranscriptSegment(models.Model):
         related_name="segments",
     )
     text = models.TextField()
+    speaker_label = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="From diarization (e.g. Speaker A); empty for non-WhisperX segments.",
+    )
     segment_order = models.PositiveIntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
 

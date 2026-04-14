@@ -1,23 +1,48 @@
 import csv
 import io
 import json
+import logging
 import os
+import tempfile
 from datetime import datetime, timedelta
+from pathlib import Path
 from django.utils import timezone
 
 import requests
+from requests import HTTPError as RequestsHTTPError
 from django.db.models import Count, Q
+from huggingface_hub import InferenceClient
+from huggingface_hub.errors import HfHubHTTPError
+
+logger = logging.getLogger(__name__)
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import get_object_or_404, render
+from django.contrib import messages
+from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views import View
 from django.views.generic import DetailView, ListView
 
-from . import coach_search
-from .forms import CoachSearchForm
+from . import coach_search, transcribe
+from .forms import AudioTranscribeForm, CoachSearchForm
 from .models import Conversation, ImprovementNote, TranscriptSegment
 from .summarize import summarize_transcript
+
+
+def _extract_hf_chat_message_content(output) -> str:
+    """Read assistant text from InferenceClient.chat_completion() result."""
+    if output is None:
+        return ""
+    choices = getattr(output, "choices", None) or []
+    if not choices:
+        return ""
+    msg = getattr(choices[0], "message", None)
+    if msg is None:
+        return ""
+    content = getattr(msg, "content", None)
+    if content is None:
+        return ""
+    return str(content).strip()
 
 
 def _hf_inference_error_message(data) -> str | None:
@@ -338,7 +363,15 @@ def api_summary(request):
 def _transcript_for_conversation(conversation):
     """Build full transcript text from conversation segments."""
     segments = conversation.segments.order_by("segment_order")
-    return " ".join(s.text for s in segments if s.text)
+    parts = []
+    for s in segments:
+        if not s.text:
+            continue
+        if getattr(s, "speaker_label", ""):
+            parts.append(f"{s.speaker_label}: {s.text}")
+        else:
+            parts.append(s.text)
+    return " ".join(parts)
 
 
 @login_required
@@ -368,9 +401,8 @@ def api_summarize_conversation(request, pk):
 @login_required
 def api_action_items(request):
     """
-    External AI: generate action items from conversation text using
-    Hugging Face Inference API. POST with conversation_id or text.
-    Requires HF_TOKEN in .env for Hugging Face Inference API.
+    External AI: action items via Hugging Face Inference Providers (chat completions).
+    POST JSON with conversation_id or text. Requires HF_TOKEN in .env.
     """
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed"}, status=405)
@@ -398,53 +430,57 @@ def api_action_items(request):
             {"error": "HF_TOKEN not configured. Add it to .env for Hugging Face Inference API."},
             status=503,
         )
-    prompt = f"List 3 action items from the following text in short bullet points:\n\n{text[:2000]}"
+    prompt = (
+        "List exactly 3 concise action items from the following transcript, as short bullet points "
+        "(one line each). Use only information from the text.\n\n"
+        f"{text[:2000]}"
+    )
+    # Chat models are routed reliably on Inference Providers; seq2seq models like flan-t5-base often are not.
+    model_id = os.environ.get(
+        "HF_ACTION_ITEMS_MODEL", "Qwen/Qwen2.5-7B-Instruct"
+    )
     try:
-        r = requests.post(
-            "https://api-inference.huggingface.co/models/google/flan-t5-base",
-            headers={"Authorization": f"Bearer {api_key}"},
-            json={"inputs": prompt, "parameters": {"max_new_tokens": 80}},
-            timeout=30,
+        client = InferenceClient(token=api_key)
+        raw = client.chat_completion(
+            model=model_id,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=200,
+            temperature=0.2,
         )
-        try:
-            data = r.json()
-        except ValueError:
-            data = {}
-
-        if not r.ok:
-            detail = _hf_inference_error_message(data) or (
-                (r.text or "")[:500] if r.text else r.reason or "Unknown error"
-            )
-            status = r.status_code if 400 <= r.status_code < 600 else 502
-            return JsonResponse(
-                {"error": "Hugging Face Inference returned an error", "detail": detail},
-                status=status,
-            )
-
-        hf_err = _hf_inference_error_message(data)
-        if hf_err:
-            return JsonResponse(
-                {"error": "Hugging Face Inference unavailable", "detail": hf_err},
-                status=503,
-            )
-
-        if isinstance(data, list) and len(data) and "generated_text" in data[0]:
-            action_items = data[0]["generated_text"].strip()
-        elif isinstance(data, dict) and "generated_text" in data:
-            action_items = data["generated_text"].strip()
+    except (HfHubHTTPError, RequestsHTTPError) as e:
+        resp = getattr(e, "response", None)
+        detail = str(e)
+        if resp is not None:
+            try:
+                body = resp.json()
+            except (ValueError, AttributeError):
+                body = {}
+            detail = _hf_inference_error_message(body) or detail
+            http_status = resp.status_code if 400 <= resp.status_code < 600 else 502
         else:
-            action_items = str(data) if data else "No action items generated."
-        if not action_items:
-            return JsonResponse(
-                {"error": "Empty response from model", "action_items": ""},
-                status=502,
-            )
-        return JsonResponse({"action_items": action_items})
-    except requests.RequestException as e:
+            http_status = 502
+        logger.error("HF Inference HTTP error for model %s: %s", model_id, detail)
         return JsonResponse(
-            {"error": "External API request failed", "detail": str(e)},
+            {"error": "Hugging Face Inference returned an error", "detail": detail},
+            status=http_status,
+        )
+    except Exception as e:
+        logger.exception("Unexpected error calling HF Inference (model=%s)", model_id)
+        return JsonResponse(
+            {
+                "error": "External inference failed",
+                "detail": f"{type(e).__name__}: {e}",
+            },
             status=502,
         )
+
+    action_items = _extract_hf_chat_message_content(raw)
+    if not action_items:
+        return JsonResponse(
+            {"error": "Empty response from model", "action_items": ""},
+            status=502,
+        )
+    return JsonResponse({"action_items": action_items})
 
 
 @login_required
@@ -746,3 +782,61 @@ def insights_view(request):
         "coach_error": coach_error,
     }
     return render(request, "conversations/insights.html", context)
+
+
+@login_required
+def transcribe_upload_view(request):
+    """
+    Upload audio → WhisperX (ASR + align + diarization) → Conversation + segments.
+    Synchronous; capped file size and duration (see conversations/transcribe.py).
+    """
+    if request.method == "POST":
+        form = AudioTranscribeForm(request.POST, request.FILES)
+        if form.is_valid():
+            audio = form.cleaned_data["audio"]
+            title = form.cleaned_data["title"].strip()
+            suffix = Path(audio.name).suffix.lower() or ".wav"
+            tmp_path = None
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                    for chunk in audio.chunks():
+                        tmp.write(chunk)
+                    tmp_path = tmp.name
+                segment_rows, duration_sec = transcribe.transcribe_audio_file(tmp_path)
+            except ValueError as e:
+                form.add_error(None, str(e))
+            except Exception as e:
+                form.add_error(
+                    None,
+                    "Transcription failed. Check the file format, HF_TOKEN, and pyannote "
+                    f"model access on Hugging Face. ({e})",
+                )
+            else:
+                conv = Conversation.objects.create(
+                    user=request.user,
+                    title=title[:200],
+                    recorded_at=timezone.now(),
+                    duration_seconds=max(1, int(round(duration_sec))) if duration_sec else None,
+                )
+                for i, (speaker_label, text) in enumerate(segment_rows, start=1):
+                    TranscriptSegment.objects.create(
+                        conversation=conv,
+                        text=text,
+                        speaker_label=(speaker_label or "")[:64],
+                        segment_order=i,
+                    )
+                messages.success(
+                    request,
+                    "Transcript created from your audio. You can summarize it from the conversation page.",
+                )
+                return redirect(conv.get_absolute_url())
+            finally:
+                if tmp_path:
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
+    else:
+        form = AudioTranscribeForm()
+
+    return render(request, "conversations/transcribe.html", {"form": form})

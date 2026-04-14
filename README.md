@@ -186,12 +186,13 @@ All A5 features are implemented and working locally. Production deployment was b
 
 ## View URLs (A5)
 - `/accounts/login/` and `/accounts/signup/`
-- Protected: `/conversations/`, `/conversations/analytics/`, `/conversations/chart/`, `/insights/`, `/progress/`, `/reports/`, `/vega-lite/`, `/external/`
+- Protected: `/conversations/`, `/conversations/transcribe/`, `/conversations/analytics/`, `/conversations/chart/`, `/insights/`, `/progress/`, `/reports/`, `/vega-lite/`, `/external/`
 - Protected APIs: `/api/conversations/`, `/api/conversations.txt`, `/api/summary/`
 - Public API: `/api/public/conversations/`
 
 ## A9 – AI in Django (local + optional API)
 
 - **Local summarization:** conversation detail → “Generate summary” (`/api/summarize/<id>/`). Uses Hugging Face `transformers` (weights download on first use).
-- **Optional action items:** same page → Hugging Face Inference API; set `HF_TOKEN` in `.env`.
+- **Optional action items:** same page → Hugging Face Inference Providers (`chat_completion`); set `HF_TOKEN` in `.env`. Optional: `HF_ACTION_ITEMS_MODEL` (default `HuggingFaceTB/SmolLM2-360M-Instruct`—use any chat model your token can call).
 - **Local semantic coach search:** `/insights/` POST form → `sentence-transformers` retrieval over `conversations/data/coach_knowledge.md`. See [README_AI.md](README_AI.md) for the full workflow and guardrails.
+- **Transcribe from audio:** `/conversations/transcribe/` → upload a short clip (default cap **5 minutes** / **25 MB**); **`WhisperX`** runs locally (ASR + alignment + **speaker diarization** via pyannote). **Requires [FFmpeg](https://ffmpeg.org/)** on your `PATH` (macOS: `brew install ffmpeg`; then open a new shell and restart `runserver`). Set **`HF_TOKEN`** (read) in `.env`—same variable works for optional Hugging Face Inference action-items—and **accept the user conditions** on Hugging Face for the diarization pipeline WhisperX uses (see the model card linked from [WhisperX](https://github.com/m-bain/whisperX) / your install logs, e.g. `pyannote/speaker-diarization-community-1`). Install deps with `pip install -r requirements.txt`. Optional env: `WHISPER_MODEL` (default `base`), `WHISPER_MAX_DURATION_SEC`, `WHISPER_FORCE_CPU=1`, `WHISPER_LANGUAGE`, `WHISPERX_BATCH_SIZE`, `WHISPERX_MIN_SPEAKERS` / `WHISPERX_MAX_SPEAKERS`, `WHISPER_COMPUTE_TYPE`.

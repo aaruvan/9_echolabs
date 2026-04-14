@@ -23,7 +23,7 @@ class ConversationAdmin(admin.ModelAdmin):
 
 @admin.register(TranscriptSegment)
 class TranscriptSegmentAdmin(admin.ModelAdmin):
-    list_display = ["conversation", "segment_order", "text_preview", "created_at"]
+    list_display = ["conversation", "segment_order", "speaker_label", "text_preview", "created_at"]
     list_filter = ["conversation"]
     search_fields = ["text"]
     inlines = [ImprovementNoteInline]

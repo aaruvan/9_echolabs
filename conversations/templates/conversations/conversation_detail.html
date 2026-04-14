@@ -57,7 +57,12 @@
                 {% for segment in conversation.segments.all %}
                 <div class="flex gap-3">
                     <span class="mt-0.5 shrink-0 text-xs font-mono text-muted-foreground w-10">#{{ segment.segment_order }}</span>
-                    <p class="text-sm text-foreground">{{ segment.text }}</p>
+                    <div class="min-w-0 flex-1">
+                        {% if segment.speaker_label %}
+                        <span class="mb-1 inline-block rounded-md bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">{{ segment.speaker_label }}</span>
+                        {% endif %}
+                        <p class="text-sm text-foreground">{{ segment.text }}</p>
+                    </div>
                 </div>
                 {% empty %}
                 <p class="text-sm text-muted-foreground">No transcript segments yet.</p>
@@ -79,7 +84,7 @@
         {# External API: action items #}
         <div class="rounded-lg border border-border bg-card p-6">
             <h2 class="mb-4 text-lg font-semibold text-foreground">Action items</h2>
-            <p class="mb-3 text-sm text-muted-foreground">Generate action items using the Hugging Face Inference API.</p>
+            <p class="mb-3 text-sm text-muted-foreground">Generate action items via Hugging Face Inference Providers (chat model; set <span class="font-mono">HF_ACTION_ITEMS_MODEL</span> to override).</p>
             <button type="button" id="btn-action-items" class="rounded-lg border border-border bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
                 Get action items
             </button>

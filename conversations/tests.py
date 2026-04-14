@@ -1,7 +1,9 @@
 import os
+from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase
 from django.utils import timezone
 
@@ -58,15 +60,18 @@ class ApiActionItemsErrorTests(TestCase):
         self.client.force_login(self.user)
 
     @patch.dict("os.environ", {"HF_TOKEN": "fake-token"}, clear=False)
-    @patch("conversations.views.requests.post")
-    def test_hf_error_json_returns_detail(self, mock_post):
+    @patch("conversations.views.InferenceClient")
+    def test_hf_error_json_returns_detail(self, mock_client_cls):
+        from huggingface_hub.errors import HfHubHTTPError
+
         mock_resp = MagicMock()
-        mock_resp.ok = False
         mock_resp.status_code = 503
-        mock_resp.text = ""
-        mock_resp.reason = "Service Unavailable"
         mock_resp.json.return_value = {"error": "Model is currently loading"}
-        mock_post.return_value = mock_resp
+        err = HfHubHTTPError("inference error", response=mock_resp)
+
+        mock_instance = MagicMock()
+        mock_instance.chat_completion.side_effect = err
+        mock_client_cls.return_value = mock_instance
 
         response = self.client.post(
             "/api/action-items/",
@@ -77,6 +82,29 @@ class ApiActionItemsErrorTests(TestCase):
         data = response.json()
         self.assertIn("detail", data)
         self.assertIn("loading", data["detail"].lower())
+
+    @patch.dict("os.environ", {"HF_TOKEN": "fake-token"}, clear=False)
+    @patch("conversations.views.InferenceClient")
+    def test_post_returns_action_items_on_success(self, mock_client_cls):
+        mock_msg = MagicMock()
+        mock_msg.content = "- Follow up on budget\n- Schedule review"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_msg
+        mock_out = MagicMock()
+        mock_out.choices = [mock_choice]
+
+        mock_instance = MagicMock()
+        mock_instance.chat_completion.return_value = mock_out
+        mock_client_cls.return_value = mock_instance
+
+        response = self.client.post(
+            "/api/action-items/",
+            data='{"conversation_id": %d}' % self.conv.pk,
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("Follow up on budget", data.get("action_items", ""))
 
     def _env_without_hf_tokens():
         def _getter(key, default=None):
@@ -95,3 +123,60 @@ class ApiActionItemsErrorTests(TestCase):
         )
         self.assertEqual(response.status_code, 503)
         self.assertIn("HF_TOKEN", response.json().get("error", ""))
+
+
+class TranscribeUploadTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user("carol", "carol@example.com", "testpass123")
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def test_get_shows_form(self):
+        response = self.client.get("/conversations/transcribe/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Transcribe")
+
+    @patch("conversations.views.transcribe.transcribe_audio_file")
+    def test_post_creates_conversation_and_redirects(self, mock_tr):
+        mock_tr.return_value = (
+            [("Speaker A", "Hello world."), ("Speaker B", "Second line.")],
+            42.7,
+        )
+        audio = SimpleUploadedFile(
+            "clip.mp3",
+            b"not-real-mp3",
+            content_type="audio/mpeg",
+        )
+        response = self.client.post(
+            "/conversations/transcribe/",
+            {"title": "Practice session", "audio": audio},
+        )
+        self.assertEqual(response.status_code, 302)
+        conv = Conversation.objects.get(user=self.user, title="Practice session")
+        self.assertEqual(conv.segments.count(), 2)
+        segs = list(conv.segments.order_by("segment_order"))
+        self.assertEqual(segs[0].text, "Hello world.")
+        self.assertEqual(segs[0].speaker_label, "Speaker A")
+        self.assertEqual(segs[1].text, "Second line.")
+        self.assertEqual(segs[1].speaker_label, "Speaker B")
+        self.assertEqual(conv.duration_seconds, 43)
+
+    @patch("conversations.views.transcribe.transcribe_audio_file")
+    def test_post_value_error_shows_message(self, mock_tr):
+        mock_tr.side_effect = ValueError("No speech detected in the audio.")
+        audio = SimpleUploadedFile("x.wav", BytesIO(b"x").read(), content_type="audio/wav")
+        response = self.client.post(
+            "/conversations/transcribe/",
+            {"title": "Empty", "audio": audio},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No speech detected")
+
+    def test_wrong_extension_rejected(self):
+        audio = SimpleUploadedFile("x.txt", b"x", content_type="text/plain")
+        response = self.client.post(
+            "/conversations/transcribe/",
+            {"title": "Bad", "audio": audio},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Unsupported format")

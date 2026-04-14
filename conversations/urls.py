@@ -9,9 +9,11 @@ from .views import (
     conversation_chart_view,
     conversations_manual_view,
     conversations_render_view,
+    transcribe_upload_view,
 )
 
 urlpatterns = [
+    path("transcribe/", transcribe_upload_view, name="transcribe_audio"),
     path("", ConversationsListView.as_view(), name="conversations_list"),
     path("analytics/", ConversationAnalyticsView.as_view(), name="conversation_analytics"),
     path("chart/", conversation_chart_view, name="conversation_chart"),

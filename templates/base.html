@@ -33,6 +33,10 @@
                     <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
                     <span class="hidden sm:inline">Insights</span>
                 </a>
+                <a href="{% url 'transcribe_audio' %}" class="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors {% if request.resolver_match.url_name == 'transcribe_audio' %}bg-primary/10 text-primary{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %}">
+                    <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="23"/></svg>
+                    <span class="hidden sm:inline">Transcribe</span>
+                </a>
                 <a href="{% url 'conversations_list' %}" class="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary">Conversations</a>
                 <a href="{% url 'reports' %}" class="flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary">Reports</a>
                 {% endif %}
@@ -54,7 +58,17 @@
     </header>
 
     <main class="mx-auto max-w-7xl px-6 py-8">
+        {% if messages %}
+        <div class="mb-6 space-y-2">
+            {% for message in messages %}
+            <div class="rounded-lg border px-4 py-3 text-sm {% if message.tags == 'success' %}border-success/30 bg-success/10 text-foreground{% elif message.tags == 'error' %}border-destructive/30 bg-destructive/10 text-destructive{% else %}border-border bg-muted/30 text-foreground{% endif %}">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
         {% block content %}{% endblock %}
     </main>
+    {% block extra_js %}{% endblock %}
 </body>
 </html>

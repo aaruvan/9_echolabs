@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block title %}Transcribe audio — EchoLabs{% endblock %}
+
+{% block content %}
+<a href="{% url 'conversations_list' %}" class="mb-6 flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
+    <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" x2="5" y1="12" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+    Back to conversations
+</a>
+
+<h1 class="text-3xl font-bold tracking-tight text-foreground">
+    New conversation from <span class="gradient-text">audio</span>
+</h1>
+<p class="mt-2 max-w-2xl text-sm text-muted-foreground">
+    Upload a short recording; we run <span class="font-medium text-foreground">WhisperX</span> locally
+    (ASR + alignment + <span class="font-medium text-foreground">speaker diarization</span> via pyannote).
+    Set <span class="font-mono text-foreground">HF_TOKEN</span> in <span class="font-mono">.env</span> and accept the diarization model terms on Hugging Face (see README).
+    <span class="font-medium text-foreground">FFmpeg</span> must be installed and on your <span class="font-mono">PATH</span> (e.g. <span class="font-mono">brew install ffmpeg</span> on macOS), then restart the server.
+    First run downloads weights. Clips are capped at about <span class="font-mono">5 minutes</span> and <span class="font-mono">25&nbsp;MB</span>; the page stays busy until processing finishes.
+</p>
+
+<div class="mt-8 max-w-xl rounded-lg border border-border bg-card p-6">
+    <form id="transcribe-form" method="post" enctype="multipart/form-data" class="space-y-5">
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+        <div class="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+            {{ form.non_field_errors.0 }}
+        </div>
+        {% endif %}
+        <div>
+            <label for="id_title" class="mb-1 block text-sm font-medium text-foreground">{{ form.title.label }}</label>
+            {{ form.title }}
+            {% if form.title.errors %}
+            <p class="mt-1 text-sm text-destructive">{{ form.title.errors.0 }}</p>
+            {% endif %}
+        </div>
+        <div>
+            <label for="id_audio" class="mb-1 block text-sm font-medium text-foreground">{{ form.audio.label }}</label>
+            {{ form.audio }}
+            {% if form.audio.errors %}
+            <p class="mt-1 text-sm text-destructive">{{ form.audio.errors.0 }}</p>
+            {% endif %}
+        </div>
+        <button type="submit" id="transcribe-submit" class="rounded-lg border border-border bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
+            Transcribe &amp; create conversation
+        </button>
+        <p id="transcribe-status" class="hidden text-sm text-muted-foreground" aria-live="polite">
+            <span class="inline-block h-3 w-3 animate-pulse rounded-full bg-primary align-middle"></span>
+            Transcribing… this may take a minute on CPU. Do not close the tab.
+        </p>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    var form = document.getElementById("transcribe-form");
+    var btn = document.getElementById("transcribe-submit");
+    var status = document.getElementById("transcribe-status");
+    if (!form || !btn) return;
+    form.addEventListener("submit", function() {
+        btn.disabled = true;
+        btn.textContent = "Working…";
+        if (status) status.classList.remove("hidden");
+    });
+})();
+</script>
+{% endblock %}
