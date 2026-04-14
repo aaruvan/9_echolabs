@@ -44,7 +44,7 @@ This document describes the AI workflow, data flow, and safety measures for the 
 ## API Integration (Second AI Feature)
 
 - **Feature**: “Get action items” – given a conversation’s transcript, an external API returns a short list of action items (e.g. bullet points).
-- **Provider**: Hugging Face Inference Providers via `huggingface_hub.InferenceClient.chat_completion`. Default model: `Qwen/Qwen2.5-7B-Instruct` (overridable via `HF_ACTION_ITEMS_MODEL` in `.env`). This is a separate AI feature from the local summarization and satisfies the requirement for a second AI feature via an external API.
+- **Provider**: Hugging Face Inference Providers via `huggingface_hub.InferenceClient.chat_completion`. Default model: `Qwen/Qwen2.5-7B-Instruct` (overridable via `HF_ACTION_ITEMS_MODEL` in `.env`). Separate from local summarization: hosted chat completion over the transcript.
 - **Configuration**: Set `HF_TOKEN` (or `HUGGINGFACE_TOKEN`) in `.env` with a Hugging Face API token. If the token is missing, the action-items endpoint returns 503 with a message asking to configure it.
 - **Usage**: On the conversation detail page, “Get action items” sends a POST request to `/api/action-items/` with JSON `{"conversation_id": <id>}`. The backend builds the transcript, calls the Hugging Face Inference Providers API with the action-items prompt, and returns `{"action_items": "..."}`. The UI displays the result in the “Action items” section.
 
@@ -56,7 +56,7 @@ This document describes the AI workflow, data flow, and safety measures for the 
 | Action items    | Same transcript or body  | Truncate, fixed prompt            | Owner-only, length cap, HF token in .env |
 | Coach search    | Form `query` on `/insights/` | Strip, max 500 chars; chunk corpus | Local embeddings only; no-match threshold; form errors |
 
-## How prior assignments informed this build (A9)
+## How prior coursework informed this build
 
 ### A6 — Model exploration (`llm-test/ai_prototype.ipynb`)
 
@@ -89,11 +89,11 @@ The RAG notebook compared **chunking strategies**, **three embedding sizes**, an
 | Oversized inputs | Character limits on transcript, API body, and coach query |
 
 
-## Part 2 (assignment write-up)
+## Part 2: Workflow and architecture
 
-### Step 2.1: AI Workflow Write-Up
+### Step 2.1: AI workflow
 
-The assignment narrative below focuses on **summarization** and **semantic coach search**. **Action items** use the Hugging Face Inference path described in “API Integration (Second AI Feature)” earlier in this file.
+The subsections below focus on **summarization** and **semantic coach search**. **Action items** follow the Hugging Face Inference path in “API Integration (Second AI Feature)” above.
 
 ### Feature 1: Summarization
 
@@ -216,39 +216,37 @@ insights.html renders matched passages or no-match message
 
 ---
 
-# Part 3: Evaluation of the Integrated Feature
+## Part 3: Evaluation
 
-This section documents the A9 **Part 3** deliverable: realistic inputs, measured outputs, failure analysis, and a documented improvement.
-
-**Reproducible demo data:** Run `python manage.py seed_part3_eval` and sign in as user **`part3_eval`** / password **`part3demo123`** (local evaluation only). That creates five conversations whose titles start with **`[Part3]`**, aligned with the scenarios below.
+**Demo data:** `python manage.py seed_part3_eval` creates user **`part3_eval`** / password **`part3demo123`** and five conversations titled with the **`[Part3]`** prefix for the scenarios below.
 
 ---
 
-## Step 3.1: Five Realistic Test Cases
+### Step 3.1: Test cases
 
-These reflect how a real user would interact with EchoLabs: **audio upload on the Transcribe page**, seeded conversations, coach search on `/insights/`, and action items (TC5) when `HF_TOKEN` is configured.
+Coverage: **Transcribe** upload, seeded **`[Part3]`** conversations, **`/insights/`** coach search, and action items when **`HF_TOKEN`** is set.
 
-| # | Scenario | User action | What we evaluate |
-|---|----------|-------------|------------------|
-| **TC1** | **Transcribe audio, then summarize** | Go to **`/conversations/transcribe/`** → upload a short audio file (within app limits) → submit → open the **new conversation** you are redirected to (or find it in the list) → click **Generate summary** | End-to-end path: **speech → WhisperX transcript segments → local BART summary** from real recorded audio (not only seed data). |
-| **TC2** | **Summarize a seeded multi-speaker meeting** | Open **`[Part3] Summary — team sync`** → **Generate summary** | Local BART on a transcript that already has **`Speaker A:` / `Speaker B:`** lines (seed / diarized style). |
-| **TC3** | **Summarize a too-short transcript** | Open **`[Part3] Summary — too short`** → **Generate summary** | Guardrail: system refuses or explains instead of hallucinating on minimal text. |
-| **TC4** | **Coach knowledge search** | Go to **`/insights/`** → submit the query (see §3.2 table) | Sentence-transformers retrieval returns ranked passages or a clear no-match message. |
-| **TC5** | **Action items from a check-in** | Open **`[Part3] Action items — project check-in`** → **Get action items** | Hugging Face Inference Providers (`Qwen/Qwen2.5-7B-Instruct` by default) returns bullet-style follow-ups when `HF_TOKEN` is set. |
+| # | Scenario | User action | Outcome |
+|---|----------|-------------|---------|
+| **TC1** | **Transcribe audio, then summarize** | **`/conversations/transcribe/`** → upload (within app limits) → submit → open the created conversation → **Generate summary** | **Speech → WhisperX segments → local BART summary** on uploaded audio (outside the seed set). |
+| **TC2** | **Summarize a seeded multi-speaker meeting** | **`[Part3] Summary — team sync`** → **Generate summary** | Local BART on a transcript with **`Speaker A:` / `Speaker B:`** lines (seed / diarized style). |
+| **TC3** | **Summarize a too-short transcript** | **`[Part3] Summary — too short`** → **Generate summary** | Guardrail: error or explanation instead of hallucinating on minimal text. |
+| **TC4** | **Coach knowledge search** | **`/insights/`** → query **`How can I slow down my speaking when I'm nervous?`** (see §3.2) | Sentence-transformers retrieval: ranked passages or no-match message. |
+| **TC5** | **Action items from a check-in** | **`[Part3] Action items — project check-in`** → **Get action items** | Hugging Face Inference (`Qwen/Qwen2.5-7B-Instruct` by default): bullet-style follow-ups when `HF_TOKEN` is set. |
 
-**WhisperX before/after (§3.4):** Use the **same audio clip** as in **TC1** for the plain-text “before” (no speaker labels) vs diarized “after” in §3.4.
+§3.4 compares plain transcript vs diarized output **on the same audio as TC1**.
 
 ---
 
-## Step 3.2: Evaluate Outputs
+### Step 3.2: Outputs
 
-| Test case | Test input | Expected behavior | Actual output | Quality notes | Latency |
-|-----------|------------|-------------------|---------------|---------------|---------|
-| **TC1** | **`/conversations/transcribe/`** → upload audio → open new conversation → **Generate summary** | Summary reflects the meeting content from **your** recording; note if it feels generic when speakers are not distinguished (ties to **Failure 1**). | **Before:** plain transcript *without* speaker labels — blockquote **below**. **After:** diarized transcript in 3.4. | Much better after improvement | 230s |
+| Test case | Test input | Intended behavior | Observed output | Quality notes | Latency |
+|-----------|------------|-------------------|-----------------|---------------|---------|
+| **TC1** | **`/conversations/transcribe/`** → upload audio → open new conversation → **Generate summary** | Summary reflects meeting content; without speaker labels, output can read generically (**Failure 1**). | **Before:** plain transcript *without* speaker labels — blockquote **below**. **After:** diarized transcript in §3.4. | Much better after improvement | 230s |
 | **TC2** | **`[Part3] Summary — team sync`**, **Generate summary** | One or two sentences summarizing the standup (blockers, timeline). | Speaker A shipped the login flow and the error states are in review. Speaker A is waiting on rate limit numbers from infra before he flips the beta flag. Speaker B and Speaker A will target Friday for beta if infra can confirm it can confirm by Wednesday. | used mock data with speakers set so pretty good | 20s |
 | **TC3** | **`[Part3] Summary — too short`** | Message that transcript is too short / not summarized. | This transcript is too short to summarize reliably. Add more transcript segments or real spoken content, then try again. | - | <1s |
-| **TC4** | Insights form query: **`How can I slow down my speaking when I'm nervous?`** | Top passages from `coach_knowledge.md` with scores, or no-match text. | From test: not from webapp: **0.599** *Pacing matters as much as word choice…* (deliberate breath between sentences); **0.589** *Confidence is partly physiological…* box breathing vs rushed speech; **0.570** *Eye contact and posture…* grounded posture slows rushed patterns; **0.424** *Reducing defensiveness…* paraphrase before rebuttal; **0.402** *Handling silence…* count two seconds before filling gaps. | good but need to work on real convnersation | 4 min with cold start |
-| **TC5** | **`[Part3] Action items — project check-in`**, **Get action items** | Short bullet list of follow-ups (timeline, retro, doc). | again with test:`- Send the client the revised timeline by Thursday` · `- Schedule a 30-minute retro with design for the navigation issues` · `- Post the incident notes in the shared doc so everyone has the same source of truth` | - | 2 mins with cold start |
+| **TC4** | Insights form query: **`How can I slow down my speaking when I'm nervous?`** | Top passages from `coach_knowledge.md` with scores, or no-match text. | **`coach_search` (local run):** **0.599** *Pacing matters as much as word choice…* (deliberate breath between sentences); **0.589** *Confidence is partly physiological…* box breathing vs rushed speech; **0.570** *Eye contact and posture…* grounded posture slows rushed patterns; **0.424** *Reducing defensiveness…* paraphrase before rebuttal; **0.402** *Handling silence…* count two seconds before filling gaps. | Strong on corpus-style queries; less representative of messy real transcripts until re-run on live UI. | ~4 min with cold start |
+| **TC5** | **`[Part3] Action items — project check-in`**, **Get action items** | Short bullet list of follow-ups (timeline, retro, doc). | **Representative HF-style bullets:** `- Send the client the revised timeline by Thursday` · `- Schedule a 30-minute retro with design for the navigation issues` · `- Post the incident notes in the shared doc so everyone has the same source of truth` | Matches seeded ask (timeline, retro, doc). | ~2 min with cold start |
 
 **TC1 — Before (plain transcript text, no speaker labels; same meeting as §3.4 “After”):**
 
@@ -256,33 +254,31 @@ These reflect how a real user would interact with EchoLabs: **audio upload on th
 
 ---
 
-## Step 3.3: Failure Analysis
+### Step 3.3: Failure analysis
 
-Document at least **two** real failure modes you observed (they can be benign “soft” failures like empty retrieval).
-
-### Failure 1: Generic summary when the transcript does not show who said what
+#### Failure 1: Generic summary when the transcript does not show who said what
 
 - **What happened:** After **TC1** (upload audio on **`/conversations/transcribe/`** → **Generate summary**), the BART summary reads **vague or generic**—e.g. it blends commitments and reactions without clearly attributing them to a specific person, or it sounds like a single narrator even when two people spoke.  
 - **Why:** The summarizer (`summarize.py`) sees one **flat string** built by joining all segment texts. If segments are **plain ASR text without `Speaker A:` / `Speaker B:`** labels (or without other role cues), the model has **no explicit notion of “who said what.”** It can only compress surface wording, so it may miss **accountability** (who owns an action) and produce a **less precise** summary than the same conversation with diarized, speaker-prefixed segments. This is a **model + input representation** limitation, not only a bug in the UI.  
 - **User-visible behavior:** The “AI Summary” box still shows a fluent paragraph, but it may not distinguish speakers or may merge their points—motivating the **WhisperX + diarization** improvement in §3.4.
 
-### Failure 2: `SmolLM2-360M-Instruct` returns 404 — model not deployed on HF Inference Providers
+#### Failure 2: `SmolLM2-360M-Instruct` returns 404 — model not deployed on HF Inference Providers
 
 - **What happened:** Clicking “Get action items” returned `502 Bad Gateway`. The Django server log showed `Bad Gateway: /api/action-items/` with no traceback, meaning the exception was being swallowed. Manually calling `InferenceClient.chat_completion(model="HuggingFaceTB/SmolLM2-360M-Instruct", ...)` returned `404 Client Error: Not Found for url: https://router.huggingface.co/hf-inference/models/HuggingFaceTB/SmolLM2-360M-Instruct/v1/chat/completions`.
 - **Why:** `HuggingFaceTB/SmolLM2-360M-Instruct` was the default model in `api_action_items`. It is **not deployed** on the HF Inference Providers free tier — the router has no running replica for it, so every request returns 404. The broad `except Exception as e` block caught the `HfHubHTTPError` and returned 502 with an empty `detail`, hiding the real cause.
 - **Fix:** Switched the default model to `Qwen/Qwen2.5-7B-Instruct`, which is reliably deployed on HF Inference Providers and produces high-quality chat completions. Also added `logger.exception()` to the catch-all block so future failures print a full traceback in the Django console instead of silently returning 502.
-- **User-visible behavior after fix:** “Get action items” returns a formatted bullet list within ~2 seconds. Override the model at any time by setting `HF_ACTION_ITEMS_MODEL` in `.env`.
+- **User-visible behavior after fix:** “Get action items” returns a formatted bullet list within ~2 seconds. Default model can be changed with **`HF_ACTION_ITEMS_MODEL`** in `.env`.
 
 
 ---
 
-## Step 3.4: Improvement Attempt — WhisperX with speaker diarization
+### Step 3.4: WhisperX with speaker diarization
 
-### Problem (before)
+#### Problem (before)
 
 Plain ASR (e.g. running **Whisper-style transcription only** without diarization) gives **text** but not **who spoke when**. For coaching and standups, “who said what” matters. A single block of text (or many tiny segments without labels) makes downstream summarization and review **harder to scan** and does not match how EchoLabs displays **multi-turn** transcripts elsewhere (seed data uses `Speaker A:` / `Speaker B:` lines).
 
-### Change (after)
+#### Change (after)
 
 The integrated pipeline in **`conversations/transcribe.py`** uses **WhisperX**:
 
@@ -293,14 +289,14 @@ The integrated pipeline in **`conversations/transcribe.py`** uses **WhisperX**:
 
 So each `TranscriptSegment` row can read like: `Speaker A: …` / `Speaker B: …`, consistent with manually seeded transcripts.
 
-### Before / after (same audio as **TC1**)
+#### Before / after (same audio as **TC1**)
 
 | Version | Content |
 |--------|---------|
-| **Before improvement** | Plain transcript **without** speaker labels — see the **TC1** blockquote in §3.2 (one joined paragraph). |
+| **Before improvement** | Plain transcript **without** speaker labels — **TC1** blockquote in §3.2 (one joined paragraph). |
 | **After improvement (WhisperX + diarization)** | Full transcript with speaker labels as produced after alignment and `assign_word_speakers` (pyannote may label clusters as Speaker A–E depending on the clip). |
 
-**After — diarized transcript (correct / full output):**
+**After — diarized transcript (example):**
 
 ```
 Speaker E: Hello everyone, thank you guys for coming to our weekly student success meeting and let's just get started.
@@ -358,13 +354,13 @@ Speaker E: Thanks for coming and if no one has anything else I think we can wrap
 
 **Comparison:** same audio; only the diarization and labeling pipeline changed (before = plain paragraph; after = labeled turns above).
 
-### Why it helped
+#### Why it helped
 
 - **Readability:** Users can skim by speaker in the conversation detail UI.  
-- **Downstream AI:** With **`Speaker A:` / `Speaker B:`** in each segment, the **same** BART summarizer receives clearer **turn structure** in the text, which reduces the **generic, undifferentiated** summaries described in **Failure 1** (same audio: compare summary quality **before** vs **after** diarization when you paste outputs).  
+- **Downstream AI:** With **`Speaker A:` / `Speaker B:`** in each segment, the **same** BART summarizer receives clearer **turn structure** in the text, which reduces the **generic, undifferentiated** summaries described in **Failure 1** on the same recording **before** vs **after** diarization.  
 - **Alignment with product:** EchoLabs is conversation-centric; diarized segments match that mental model.
 
-### Tradeoffs
+#### Tradeoffs
 
 - **Setup:** Requires `HF_TOKEN` for pyannote; first run downloads weights.  
 - **Latency / compute:** Diarization adds work versus ASR-only; acceptable for short clips under the configured **max duration** / **max file size** caps.
