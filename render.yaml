@@ -1,0 +1,27 @@
+# Render.com blueprint for the EchoLabs A10 Analytics Dashboard.
+# Deploy with one click via "New +" -> "Blueprint" pointing at this repo,
+# or manually as a Web Service using the build/start commands below.
+#
+# After deploy, the dashboard lives at:  https://<service>.onrender.com/dashboard/
+# Test credentials (created automatically by build.sh):
+#     username: mohitg2
+#     password: uiuc12345
+services:
+  - type: web
+    name: echolabs-a10-dashboard
+    runtime: python
+    plan: free
+    region: oregon
+    buildCommand: "bash build.sh"
+    startCommand: "gunicorn echolabs_project.wsgi:application --workers 2 --timeout 60"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DJANGO_SETTINGS_MODULE
+        value: echolabs_project.settings.prod
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DJANGO_ALLOWED_HOSTS
+        value: ".onrender.com"
+      - key: WEB_CONCURRENCY
+        value: "2"

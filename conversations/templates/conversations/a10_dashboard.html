@@ -1,0 +1,419 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Analytics Dashboard — EchoLabs{% endblock %}
+
+{% block content %}
+{{ sp1_data|json_script:"sp1-data" }}
+{{ sp2_data|json_script:"sp2-data" }}
+{{ sp3_data|json_script:"sp3-data" }}
+{{ ub1_data|json_script:"ub1-data" }}
+{{ ub2_data|json_script:"ub2-data" }}
+{{ ub3_data|json_script:"ub3-data" }}
+{{ c1_data|json_script:"c1-data" }}
+{{ c2_data|json_script:"c2-data" }}
+{{ c3_data|json_script:"c3-data" }}
+
+<section class="mb-8">
+    <h1 class="text-3xl font-bold tracking-tight text-foreground">
+        Analytics <span class="gradient-text">Dashboard</span>
+    </h1>
+    <p class="mt-2 text-muted-foreground">
+        System performance, user behavior, and cost — across every recorded
+        conversation in EchoLabs. Cost is approximated from word count using a
+        ${{ metrics.cost_per_word }}/word proxy rate.
+    </p>
+</section>
+
+{# --- Headline metrics (8 cards) --- #}
+<section class="mb-10 grid grid-cols-2 gap-4 md:grid-cols-4">
+    <div class="rounded-lg border border-border bg-card p-5 glow-sm">
+        <span class="metric-label">Conversations</span>
+        <div class="mt-3 metric-value text-foreground">{{ metrics.total_conversations }}</div>
+    </div>
+    <div class="rounded-lg border border-border bg-card p-5 glow-sm">
+        <span class="metric-label">Users</span>
+        <div class="mt-3 metric-value text-foreground">{{ metrics.unique_users }}</div>
+    </div>
+    <div class="rounded-lg border border-border bg-card p-5 glow-sm">
+        <span class="metric-label">Total segments</span>
+        <div class="mt-3 metric-value text-foreground">{{ metrics.total_segments }}</div>
+    </div>
+    <div class="rounded-lg border border-border bg-card p-5 glow-sm">
+        <span class="metric-label">Avg segments / conv</span>
+        <div class="mt-3 metric-value text-foreground">{{ metrics.avg_segments }}</div>
+    </div>
+    <div class="rounded-lg border border-border bg-card p-5 glow-sm">
+        <span class="metric-label">Improvement notes</span>
+        <div class="mt-3 metric-value text-foreground">{{ metrics.total_notes }}</div>
+    </div>
+    <div class="rounded-lg border border-border bg-card p-5 glow-sm">
+        <span class="metric-label">Total words</span>
+        <div class="mt-3 metric-value text-foreground">{{ metrics.total_words }}</div>
+    </div>
+    <div class="rounded-lg border border-border bg-card p-5 glow-sm">
+        <span class="metric-label">Total est. cost</span>
+        <div class="mt-3 metric-value text-foreground">${{ metrics.total_cost }}</div>
+    </div>
+    <div class="rounded-lg border border-border bg-card p-5 glow-sm">
+        <span class="metric-label">Avg cost / conv</span>
+        <div class="mt-3 metric-value text-foreground">${{ metrics.avg_cost_per_conv }}</div>
+    </div>
+</section>
+
+{# --- System Performance --- #}
+<section class="mb-12">
+    <h2 class="mb-1 text-xl font-semibold text-foreground">System Performance</h2>
+    <p class="mb-6 text-sm text-muted-foreground">
+        How long are conversations? Which inputs dominate? Is AI output consistent across input sizes?
+    </p>
+    <div class="grid gap-6 lg:grid-cols-3">
+        <div class="rounded-lg border border-border bg-card p-6 glow-sm">
+            <h3 class="text-base font-semibold text-foreground">SP-1 · Segment-count distribution</h3>
+            <p class="mt-1 text-xs font-mono text-muted-foreground">
+                Histogram of segments per conversation — exposes skew between short and long sessions.
+            </p>
+            <div id="chart-sp1" class="chart-container"></div>
+        </div>
+        <div class="rounded-lg border border-border bg-card p-6 glow-sm">
+            <h3 class="text-base font-semibold text-foreground">SP-2 · Top conversations by word count</h3>
+            <p class="mt-1 text-xs font-mono text-muted-foreground">
+                Heaviest input drivers — useful for targeting performance work.
+            </p>
+            <div id="chart-sp2" class="chart-container"></div>
+        </div>
+        <div class="rounded-lg border border-border bg-card p-6 glow-sm">
+            <h3 class="text-base font-semibold text-foreground">SP-3 · AI note consistency by length</h3>
+            <p class="mt-1 text-xs font-mono text-muted-foreground">
+                Avg improvement notes generated per conversation, grouped by segment-count bucket.
+            </p>
+            <div id="chart-sp3" class="chart-container"></div>
+        </div>
+    </div>
+</section>
+
+{# --- User Behavior --- #}
+<section class="mb-12">
+    <h2 class="mb-1 text-xl font-semibold text-foreground">User Behavior</h2>
+    <p class="mb-6 text-sm text-muted-foreground">
+        How often is the system used? What feedback dominates? How much of the user base is engaging with AI output?
+    </p>
+    <div class="grid gap-6 lg:grid-cols-3">
+        <div class="rounded-lg border border-border bg-card p-6 glow-sm">
+            <h3 class="text-base font-semibold text-foreground">UB-1 · Daily usage (last 30 days)</h3>
+            <p class="mt-1 text-xs font-mono text-muted-foreground">
+                Recorded conversations per day with a 7-day rolling average to smooth noise.
+            </p>
+            <div id="chart-ub1" class="chart-container"></div>
+        </div>
+        <div class="rounded-lg border border-border bg-card p-6 glow-sm">
+            <h3 class="text-base font-semibold text-foreground">UB-2 · Most common note types</h3>
+            <p class="mt-1 text-xs font-mono text-muted-foreground">
+                Frequency of filler / pace / tone / confidence feedback the AI generates.
+            </p>
+            <div id="chart-ub2" class="chart-container"></div>
+        </div>
+        <div class="rounded-lg border border-border bg-card p-6 glow-sm">
+            <h3 class="text-base font-semibold text-foreground">UB-3 · AI feature adoption</h3>
+            <p class="mt-1 text-xs font-mono text-muted-foreground">
+                Share of conversations that received any AI improvement note.
+            </p>
+            <div id="chart-ub3" class="chart-container"></div>
+        </div>
+    </div>
+</section>
+
+{# --- Cost --- #}
+<section class="mb-12">
+    <h2 class="mb-1 text-xl font-semibold text-foreground">Cost</h2>
+    <p class="mb-6 text-sm text-muted-foreground">
+        Estimated processing cost using word count as a token-count proxy
+        (${{ metrics.cost_per_word }}/word). Useful for relative comparisons across users, time, and session size.
+    </p>
+    <div class="grid gap-6 lg:grid-cols-3">
+        <div class="rounded-lg border border-border bg-card p-6 glow-sm">
+            <h3 class="text-base font-semibold text-foreground">C-1 · Cost per user (stacked by note type)</h3>
+            <p class="mt-1 text-xs font-mono text-muted-foreground">
+                Total estimated cost per user, split across the AI feedback categories triggered.
+            </p>
+            <div id="chart-c1" class="chart-container"></div>
+        </div>
+        <div class="rounded-lg border border-border bg-card p-6 glow-sm">
+            <h3 class="text-base font-semibold text-foreground">C-2 · Average cost per conversation, weekly</h3>
+            <p class="mt-1 text-xs font-mono text-muted-foreground">
+                Trend over time — flags drift in average session size / token spend.
+            </p>
+            <div id="chart-c2" class="chart-container"></div>
+        </div>
+        <div class="rounded-lg border border-border bg-card p-6 glow-sm">
+            <h3 class="text-base font-semibold text-foreground">C-3 · Cost by duration bucket</h3>
+            <p class="mt-1 text-xs font-mono text-muted-foreground">
+                Tests whether longer recordings produce proportionally larger transcripts (and cost).
+            </p>
+            <div id="chart-c3" class="chart-container"></div>
+        </div>
+    </div>
+</section>
+
+{# --- Method note (statistical thinking) --- #}
+<section class="mb-12">
+    <div class="rounded-lg border border-border bg-card p-6">
+        <h2 class="text-base font-semibold text-foreground">Statistical thinking</h2>
+        <ul class="mt-3 list-disc space-y-1 pl-6 text-sm text-muted-foreground">
+            <li><b>Distributions</b> (SP-1): histogram exposes skew that a mean would hide.</li>
+            <li><b>Group comparison</b> (SP-3, C-3): bucketing by segment count and duration tests whether the AI scales consistently with input size.</li>
+            <li><b>Trend over time</b> (UB-1, C-2): a rolling weekly view smooths noise and surfaces real growth or drift.</li>
+            <li><b>Proportions vs. counts</b> (UB-3): the donut adds a relative view alongside the raw counts.</li>
+            <li><b>Cost proxy</b> (C-1, C-2, C-3): word count is used as a token-count proxy — relative comparisons stay valid even without billing data.</li>
+        </ul>
+    </div>
+</section>
+
+<style>
+    /* Vega-Lite uses width: 'container' which needs a sized parent. */
+    .chart-container { margin-top: 1rem; width: 100%; min-height: 240px; }
+    .chart-container > .vega-embed,
+    .chart-container > .vega-embed > svg { width: 100% !important; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+<script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
+<script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+<script>
+(function() {
+    var read = function(id) { return JSON.parse(document.getElementById(id).textContent); };
+    var sp1 = read('sp1-data');
+    var sp2 = read('sp2-data');
+    var sp3 = read('sp3-data');
+    var ub1 = read('ub1-data');
+    var ub2 = read('ub2-data');
+    var ub3 = read('ub3-data');
+    var c1  = read('c1-data');
+    var c2  = read('c2-data');
+    var c3  = read('c3-data');
+
+    var theme = {
+        background: 'transparent',
+        config: {
+            background: 'transparent',
+            view: { stroke: 'transparent' },
+            axis: {
+                labelColor: 'rgba(229,231,235,0.75)',
+                titleColor: 'rgba(229,231,235,0.9)',
+                gridColor: 'rgba(148,163,184,0.15)',
+                domainColor: 'rgba(148,163,184,0.3)',
+                tickColor: 'rgba(148,163,184,0.3)',
+                labelFont: 'JetBrains Mono, monospace',
+                titleFont: 'Inter, system-ui, sans-serif',
+                titleFontWeight: 500,
+                labelFontSize: 11,
+                titleFontSize: 12
+            },
+            legend: {
+                labelColor: 'rgba(229,231,235,0.75)',
+                titleColor: 'rgba(229,231,235,0.9)',
+                labelFont: 'Inter, system-ui, sans-serif',
+                titleFont: 'Inter, system-ui, sans-serif'
+            },
+            title: {
+                color: 'rgba(229,231,235,0.95)',
+                font: 'Inter, system-ui, sans-serif',
+                fontWeight: 600,
+                fontSize: 14
+            }
+        }
+    };
+    var primary = '#24dbc9';
+    var info    = '#1ac3e6';
+    var warning = '#f5b942';
+    var palette = ['#24dbc9', '#1ac3e6', '#f5b942', '#a78bfa', '#f87171', '#34d399'];
+
+    var common = { actions: false, renderer: 'svg' };
+
+    // SP-1 histogram
+    vegaEmbed('#chart-sp1', Object.assign({
+        $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+        data: { values: sp1 },
+        mark: { type: 'bar', color: primary, cornerRadiusTopLeft: 3, cornerRadiusTopRight: 3 },
+        encoding: {
+            x: { field: 'segments', bin: { maxbins: 10 }, type: 'quantitative', title: 'Segments per conversation' },
+            y: { aggregate: 'count', type: 'quantitative', title: 'Conversations' },
+            tooltip: [
+                { field: 'segments', bin: { maxbins: 10 }, type: 'quantitative', title: 'Segment range' },
+                { aggregate: 'count', type: 'quantitative', title: 'Conversations' }
+            ]
+        },
+        width: 'container', height: 240
+    }, theme), common);
+
+    // SP-2 horizontal bar
+    vegaEmbed('#chart-sp2', Object.assign({
+        $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+        data: { values: sp2 },
+        mark: { type: 'bar', color: info, cornerRadiusEnd: 3 },
+        encoding: {
+            y: { field: 'label', type: 'nominal', title: null, sort: '-x', axis: { labelLimit: 220 } },
+            x: { field: 'words', type: 'quantitative', title: 'Words' },
+            tooltip: [
+                { field: 'label', type: 'nominal', title: 'Conversation' },
+                { field: 'words', type: 'quantitative', title: 'Words' }
+            ]
+        },
+        width: 'container', height: 280
+    }, theme), common);
+
+    // SP-3 grouped bar (avg + median per bucket)
+    vegaEmbed('#chart-sp3', Object.assign({
+        $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+        data: {
+            values: sp3.flatMap(function(d) {
+                return [
+                    { bucket: d.bucket, metric: 'mean',   notes: d.avg_notes,    n: d.conversations },
+                    { bucket: d.bucket, metric: 'median', notes: d.median_notes, n: d.conversations }
+                ];
+            })
+        },
+        mark: { type: 'bar', cornerRadiusEnd: 3 },
+        encoding: {
+            x: { field: 'bucket', type: 'nominal', title: 'Conversation length',
+                 sort: ['short (<5)', 'medium (5-10)', 'long (>10)'] },
+            y: { field: 'notes', type: 'quantitative', title: 'Notes per conversation' },
+            xOffset: { field: 'metric' },
+            color: { field: 'metric', type: 'nominal', scale: { range: [primary, info] }, title: null },
+            tooltip: [
+                { field: 'bucket', title: 'Bucket' },
+                { field: 'metric', title: 'Metric' },
+                { field: 'notes', title: 'Notes' },
+                { field: 'n',     title: 'Conversations' }
+            ]
+        },
+        width: 'container', height: 240
+    }, theme), common);
+
+    // UB-1 line + 7-day rolling average
+    vegaEmbed('#chart-ub1', Object.assign({
+        $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+        data: { values: ub1 },
+        transform: [
+            { window: [{ op: 'mean', field: 'count', as: 'rolling7' }],
+              frame: [-6, 0] }
+        ],
+        layer: [
+            { mark: { type: 'area', color: primary, opacity: 0.18, interpolate: 'monotone' },
+              encoding: {
+                  x: { field: 'day', type: 'temporal', title: null },
+                  y: { field: 'count', type: 'quantitative', title: 'Conversations' }
+              }
+            },
+            { mark: { type: 'line', color: primary, strokeWidth: 2, interpolate: 'monotone' },
+              encoding: {
+                  x: { field: 'day', type: 'temporal' },
+                  y: { field: 'count', type: 'quantitative' }
+              }
+            },
+            { mark: { type: 'line', color: warning, strokeDash: [4, 3], strokeWidth: 1.5 },
+              encoding: {
+                  x: { field: 'day', type: 'temporal' },
+                  y: { field: 'rolling7', type: 'quantitative' },
+                  tooltip: [
+                      { field: 'day',      type: 'temporal',     title: 'Day',     format: '%b %d' },
+                      { field: 'count',    type: 'quantitative', title: 'Today' },
+                      { field: 'rolling7', type: 'quantitative', title: '7-day avg', format: '.2f' }
+                  ]
+              }
+            }
+        ],
+        width: 'container', height: 240
+    }, theme), common);
+
+    // UB-2 horizontal bar
+    vegaEmbed('#chart-ub2', Object.assign({
+        $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+        data: { values: ub2 },
+        mark: { type: 'bar', color: warning, cornerRadiusEnd: 3 },
+        encoding: {
+            y: { field: 'type',  type: 'nominal',     title: null, sort: '-x' },
+            x: { field: 'count', type: 'quantitative', title: 'Notes' },
+            tooltip: [
+                { field: 'type',  title: 'Note type' },
+                { field: 'count', title: 'Count' }
+            ]
+        },
+        width: 'container', height: 240
+    }, theme), common);
+
+    // UB-3 donut
+    vegaEmbed('#chart-ub3', Object.assign({
+        $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+        data: { values: ub3 },
+        mark: { type: 'arc', innerRadius: 60, outerRadius: 100 },
+        encoding: {
+            theta: { field: 'count', type: 'quantitative' },
+            color: { field: 'category', type: 'nominal',
+                     scale: { range: [primary, 'rgba(148,163,184,0.35)'] }, title: null },
+            tooltip: [
+                { field: 'category', title: 'Category' },
+                { field: 'count',    title: 'Conversations' }
+            ]
+        },
+        view: { stroke: null },
+        width: 'container', height: 240
+    }, theme), common);
+
+    // C-1 stacked bar (cost per user, by note type)
+    vegaEmbed('#chart-c1', Object.assign({
+        $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+        data: { values: c1 },
+        mark: { type: 'bar', cornerRadiusEnd: 3 },
+        encoding: {
+            x: { field: 'user', type: 'nominal', title: 'User', sort: '-y' },
+            y: { field: 'cost', type: 'quantitative', title: 'Estimated cost (USD)', stack: 'zero' },
+            color: { field: 'note_type', type: 'nominal', scale: { range: palette }, title: 'Note type' },
+            tooltip: [
+                { field: 'user',      title: 'User' },
+                { field: 'note_type', title: 'Note type' },
+                { field: 'cost',      title: 'Cost', format: '$.4f' }
+            ]
+        },
+        width: 'container', height: 260
+    }, theme), common);
+
+    // C-2 line over time (avg cost per conversation, weekly)
+    vegaEmbed('#chart-c2', Object.assign({
+        $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+        data: { values: c2 },
+        layer: [
+            { mark: { type: 'line', color: info, strokeWidth: 2, interpolate: 'monotone', point: { color: info, size: 50 } },
+              encoding: {
+                  x: { field: 'week', type: 'temporal', title: 'Week' },
+                  y: { field: 'avg_cost', type: 'quantitative', title: 'Avg cost / conversation (USD)' },
+                  tooltip: [
+                      { field: 'week',         type: 'temporal',     title: 'Week start', format: '%b %d, %Y' },
+                      { field: 'avg_cost',     type: 'quantitative', title: 'Avg cost',  format: '$.4f' },
+                      { field: 'conversations', type: 'quantitative', title: 'Conversations' }
+                  ]
+              }
+            }
+        ],
+        width: 'container', height: 240
+    }, theme), common);
+
+    // C-3 grouped bar (avg cost by duration bucket)
+    vegaEmbed('#chart-c3', Object.assign({
+        $schema: 'https://vega.github.io/schema/vega-lite/v5.json',
+        data: { values: c3 },
+        mark: { type: 'bar', color: primary, cornerRadiusEnd: 3 },
+        encoding: {
+            x: { field: 'bucket', type: 'nominal', title: 'Duration bucket',
+                 sort: ['<60s', '60-180s', '>180s'] },
+            y: { field: 'avg_cost', type: 'quantitative', title: 'Avg cost (USD)' },
+            tooltip: [
+                { field: 'bucket', title: 'Bucket' },
+                { field: 'avg_cost', title: 'Avg cost', format: '$.4f' },
+                { field: 'conversations', title: 'Conversations' }
+            ]
+        },
+        width: 'container', height: 240
+    }, theme), common);
+})();
+</script>
+{% endblock %}

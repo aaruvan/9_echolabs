@@ -1,0 +1,12 @@
+Django>=5.0,<6.0
+python-dotenv
+django-allauth
+gunicorn
+whitenoise
+dj-database-url
+requests
+huggingface_hub
+numpy
+scikit-learn
+PyJWT
+cryptography

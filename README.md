@@ -196,3 +196,74 @@ All A5 features are implemented and working locally. Production deployment was b
 - **Optional action items:** same page → Hugging Face Inference Providers (`chat_completion`); set `HF_TOKEN` in `.env`. Optional: `HF_ACTION_ITEMS_MODEL` (default `HuggingFaceTB/SmolLM2-360M-Instruct`—use any chat model your token can call).
 - **Local semantic coach search:** `/insights/` POST form → `sentence-transformers` retrieval over `conversations/data/coach_knowledge.md`. See [README_AI.md](README_AI.md) for the full workflow and guardrails.
 - **Transcribe from audio:** `/conversations/transcribe/` → upload a short clip (default cap **5 minutes** / **25 MB**); **`WhisperX`** runs locally (ASR + alignment + **speaker diarization** via pyannote). **Requires [FFmpeg](https://ffmpeg.org/)** on your `PATH` (macOS: `brew install ffmpeg`; then open a new shell and restart `runserver`). Set **`HF_TOKEN`** (read) in `.env`—same variable works for optional Hugging Face Inference action-items—and **accept the user conditions** on Hugging Face for the diarization pipeline WhisperX uses (see the model card linked from [WhisperX](https://github.com/m-bain/whisperX) / your install logs, e.g. `pyannote/speaker-diarization-community-1`). Install deps with `pip install -r requirements.txt`. Optional env: `WHISPER_MODEL` (default `base`), `WHISPER_MAX_DURATION_SEC`, `WHISPER_FORCE_CPU=1`, `WHISPER_LANGUAGE`, `WHISPERX_BATCH_SIZE`, `WHISPERX_MIN_SPEAKERS` / `WHISPERX_MAX_SPEAKERS`, `WHISPER_COMPUTE_TYPE`.
+
+
+
+## A10 – Analytics Dashboard
+
+The A10 system-wide analytics dashboard lives at `/dashboard/` (link "Analytics" in the navbar after login). It implements every widget from the A10 Part 1 plan in three categories: System Performance, User Behavior, and Cost. .
+
+### Test credentials
+```
+username: mohitg2
+password: uiuc12345
+```
+The seed command below creates this user automatically.
+
+### Run locally
+```bash
+# 1. (Optional) slim venv with no torch/whisper — enough for the dashboard
+python -m venv .venv-a10
+# Windows:
+.\.venv-a10\Scripts\Activate.ps1
+# macOS/Linux:
+# source .venv-a10/bin/activate
+
+# 2. Install slim production deps (faster than full requirements.txt)
+pip install -r requirements-prod.txt
+
+# 3. Set up env (create .env or export SECRET_KEY in your shell)
+copy .env.example .env   # then edit SECRET_KEY
+
+# 4. Migrate + seed simulated data + create the mohitg2 test user
+python manage.py migrate
+python manage.py seed_a10_dashboard
+
+# 5. Run the server
+python manage.py runserver
+```
+Open <http://127.0.0.1:8000/dashboard/> and log in with `mohitg2 / uiuc12345`.
+
+### Deploy to Render 
+The repo ships a `render.yaml` blueprint, a `build.sh` build script, and a slim `requirements-prod.txt` so the free tier (no torch / whisper) can build in minutes.
+
+2. Create a free account at <https://render.com> and connect the GitHub repo.
+3. New + → **Blueprint** → pick the repo → Render reads `render.yaml`, sets a generated `SECRET_KEY`, and starts the build.
+4. The build runs `bash build.sh` which:
+   - installs `requirements-prod.txt`,
+   - runs `collectstatic` (Whitenoise serves static files in prod),
+   - applies migrations,
+   - `mohitg2 / uiuc12345` user and demo data exist on first boot.
+5. When the build is green, the dashboard is live at `https://<service>.onrender.com/dashboard/` (the Render service URL).
+
+The dashboard is simply found under the dashboard tab.
+
+### Widgets shipped
+Mapped 1:1 to A10 Part 1:
+- **SP-1** Segment-count histogram, **SP-2** Top conversations by word count, **SP-3** Mean/median notes per conversation by length bucket
+- **UB-1** Daily usage line + 7-day rolling avg, **UB-2** Note-type frequency, **UB-3** AI-feature adoption donut
+- **C-1** Cost per user (stacked by note type), **C-2** Average cost per conversation, weekly, **C-3** Average cost by duration bucket
+
+Cost uses a `$0.0000026/word` proxy (≈$2/1M tokens at 1.3 tokens/word) — explicitly called out in the dashboard footer.
+
+### Screenshots
+- Headline metrics: `docs/a10/dashboard-headline.png`
+- SP-1 histogram: `docs/a10/dashboard-sp1-histogram.png`
+- SP-3 grouped bar: `docs/a10/dashboard-sp3-grouped.png`
+- UB-2 note types: `docs/a10/dashboard-ub2-noteTypes.png`
+- C-2 cost trend over time: `docs/a10/dashboard-c2-trend.png`
+
+### Re-seed with different parameters
+```bash
+python manage.py seed_a10_dashboard --conversations 250 --days 90 --seed 7
+```
