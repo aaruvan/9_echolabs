@@ -18,6 +18,7 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
+from conversations.dashboard import a10_dashboard_view
 from conversations.views import (
     api_action_items,
     api_summarize_conversation,
@@ -39,6 +40,7 @@ from conversations.views import (
 
 urlpatterns = [
     path("", home_view, name="home"),
+    path("dashboard/", a10_dashboard_view, name="a10_dashboard"),
     path("admin/", admin.site.urls),
     path("accounts/", include("allauth.urls")),
     path("conversations/", include("conversations.urls")),
