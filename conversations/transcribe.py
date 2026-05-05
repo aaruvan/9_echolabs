@@ -1,24 +1,25 @@
 """
-Local speech-to-text with WhisperX: ASR + alignment + pyannote speaker diarization.
-Requires HF_TOKEN (read) in the environment and accepting pyannote model terms on Hugging Face.
+Hosted speech-to-text via AssemblyAI: transcription + speaker diarization in one call.
+Requires ASSEMBLYAI_API_KEY in the environment.
 """
 from __future__ import annotations
 
-import gc
 import os
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
-# Sync upload policy: keep CPU/GPU time and HTTP request bounded for local dev.
+import requests
+
+# Sync upload policy: bound HTTP request time and prevent runaway costs.
 MAX_AUDIO_DURATION_SEC = int(os.environ.get("WHISPER_MAX_DURATION_SEC", "300"))  # 5 min
 MAX_FILE_BYTES = int(os.environ.get("WHISPER_MAX_FILE_BYTES", str(25 * 1024 * 1024)))
 
-_asr_model = None
-_asr_cache_key: tuple[str, str, str] | None = None
-_diarize_pipeline = None
-_diarize_cache_key: tuple[str, str] | None = None
+ASSEMBLYAI_BASE = "https://api.assemblyai.com/v2"
+POLL_INTERVAL_SEC = 2
+POLL_TIMEOUT_SEC = 240
 
 
 def _probe_duration_seconds(path: str) -> float | None:
@@ -47,110 +48,100 @@ def _probe_duration_seconds(path: str) -> float | None:
         return None
 
 
-def _pick_device() -> str:
-    if os.environ.get("WHISPER_FORCE_CPU", "").lower() in ("1", "true", "yes"):
-        return "cpu"
-    try:
-        import torch
-
-        if torch.cuda.is_available():
-            return "cuda"
-    except ImportError:
-        pass
-    return "cpu"
-
-
-def _get_hf_token() -> str:
-    token = (os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN") or "").strip()
+def _get_api_key() -> str:
+    token = os.environ.get("ASSEMBLYAI_API_KEY", "").strip()
     if not token:
-        raise ValueError(
-            "HF_TOKEN (or HUGGINGFACE_TOKEN) is required for speaker diarization. "
-            "Create a read token at https://huggingface.co/settings/tokens, add it to .env, "
-            "and accept the user agreement for the pyannote diarization model used by WhisperX "
-            "(see README)."
+        raise RuntimeError(
+            "ASSEMBLYAI_API_KEY is not set. Add it to .env (dev) or to your "
+            "host's environment variables (prod) to enable transcription."
         )
     return token
 
 
-def _get_asr_model():
-    """Cache WhisperX ASR model per (name, device, compute_type, preset language)."""
-    global _asr_model, _asr_cache_key
-    import whisperx
-
-    device = _pick_device()
-    compute_type = os.environ.get("WHISPER_COMPUTE_TYPE") or (
-        "float16" if device == "cuda" else "float32"
-    )
-    name = os.environ.get("WHISPER_MODEL", "base")
-    preset_lang = (os.environ.get("WHISPER_LANGUAGE") or "").strip() or None
-    hf_token = _get_hf_token()
-    key = (name, device, compute_type, preset_lang or "")
-    if _asr_model is None or _asr_cache_key != key:
-        _asr_model = whisperx.load_model(
-            name,
-            device,
-            compute_type=compute_type,
-            language=preset_lang,
-            use_auth_token=hf_token,
-        )
-        _asr_cache_key = key
-    return _asr_model, device
-
-
-def _get_diarize_pipeline(hf_token: str, device: str):
-    global _diarize_pipeline, _diarize_cache_key
-    from whisperx.diarize import DiarizationPipeline
-
-    key = (device, hf_token)
-    if _diarize_pipeline is None or _diarize_cache_key != key:
-        model_name = os.environ.get("WHISPERX_DIARIZE_MODEL")
-        kwargs = {"token": hf_token, "device": device}
-        if model_name:
-            kwargs["model_name"] = model_name
-        _diarize_pipeline = DiarizationPipeline(**kwargs)
-        _diarize_cache_key = key
-    return _diarize_pipeline
-
-
 def _format_speaker_label(raw: str | None) -> str:
-    """Map pyannote-style ids to Speaker A, Speaker B, …"""
-    if raw is None or str(raw).strip() == "":
+    if raw is None:
         return ""
     s = str(raw).strip()
-    m = re.match(r"SPEAKER_(\d+)$", s, re.IGNORECASE)
+    if not s:
+        return ""
+    m = re.match(r"^SPEAKER[_\s-]?(\d+)$", s, flags=re.IGNORECASE)
     if m:
         n = int(m.group(1))
         if 0 <= n < 26:
             return f"Speaker {chr(ord('A') + n)}"
         return f"Speaker {n + 1}"
+    if len(s) == 1 and s.isalpha():
+        return f"Speaker {s.upper()}"
     return s[:64]
 
 
-def _env_int(name: str) -> int | None:
-    v = (os.environ.get(name) or "").strip()
-    return int(v) if v.isdigit() else None
-
-
-def _require_ffmpeg() -> None:
-    """WhisperX decodes most formats via a subprocess to `ffmpeg`."""
-    if shutil.which("ffmpeg") is None:
-        raise ValueError(
-            "FFmpeg is not installed or not on your PATH. WhisperX needs the `ffmpeg` "
-            "command to decode audio. Install FFmpeg (macOS: `brew install ffmpeg`), "
-            "open a new terminal so PATH updates, then restart `runserver`."
+def _upload(path: Path, api_key: str) -> str:
+    headers = {"authorization": api_key}
+    with path.open("rb") as fh:
+        r = requests.post(
+            f"{ASSEMBLYAI_BASE}/upload",
+            headers=headers,
+            data=fh,
+            timeout=120,
         )
+    r.raise_for_status()
+    upload_url = r.json().get("upload_url")
+    if not upload_url:
+        raise RuntimeError("AssemblyAI upload returned no upload_url.")
+    return upload_url
+
+
+def _request_transcript(audio_url: str, api_key: str) -> str:
+    headers = {"authorization": api_key, "content-type": "application/json"}
+    body = {
+        "audio_url": audio_url,
+        "speaker_labels": True,
+        "language_code": os.environ.get("WHISPER_LANGUAGE") or "en",
+    }
+    r = requests.post(
+        f"{ASSEMBLYAI_BASE}/transcript",
+        headers=headers,
+        json=body,
+        timeout=30,
+    )
+    r.raise_for_status()
+    transcript_id = r.json().get("id")
+    if not transcript_id:
+        raise RuntimeError("AssemblyAI did not return a transcript id.")
+    return transcript_id
+
+
+def _poll_transcript(transcript_id: str, api_key: str) -> dict:
+    headers = {"authorization": api_key}
+    deadline = time.monotonic() + POLL_TIMEOUT_SEC
+    while time.monotonic() < deadline:
+        r = requests.get(
+            f"{ASSEMBLYAI_BASE}/transcript/{transcript_id}",
+            headers=headers,
+            timeout=30,
+        )
+        r.raise_for_status()
+        data = r.json()
+        status = data.get("status")
+        if status == "completed":
+            return data
+        if status == "error":
+            raise RuntimeError(
+                f"AssemblyAI transcription failed: {data.get('error') or 'unknown error'}"
+            )
+        time.sleep(POLL_INTERVAL_SEC)
+    raise RuntimeError(
+        f"AssemblyAI transcription timed out after {POLL_TIMEOUT_SEC}s."
+    )
 
 
 def transcribe_audio_file(path: str) -> tuple[list[tuple[str, str]], float]:
     """
-    Transcribe audio at path with WhisperX + diarization.
+    Transcribe audio at path with AssemblyAI (transcription + speaker diarization).
 
     Returns (list of (speaker_label, segment_text), duration_seconds).
     speaker_label may be empty if diarization could not assign a speaker.
     """
-    import torch
-    import whisperx
-
     p = Path(path)
     if not p.is_file():
         raise ValueError("Audio file is missing or invalid.")
@@ -169,71 +160,33 @@ def transcribe_audio_file(path: str) -> tuple[list[tuple[str, str]], float]:
             f"Maximum is {MAX_AUDIO_DURATION_SEC} seconds (~{MAX_AUDIO_DURATION_SEC // 60} minutes)."
         )
 
-    hf_token = _get_hf_token()
-    _require_ffmpeg()
-    audio = whisperx.load_audio(str(p))
-    model, device = _get_asr_model()
-    batch_size = _env_int("WHISPERX_BATCH_SIZE") or (8 if device == "cuda" else 4)
-
-    result = model.transcribe(
-        audio,
-        batch_size=batch_size,
-        language=os.environ.get("WHISPER_LANGUAGE") or None,
-    )
-    if not result.get("segments"):
-        raise ValueError(
-            "No speech detected in the audio. Try a clearer recording or a different format."
-        )
-
-    language = result.get("language") or "en"
-    align_model, align_metadata = whisperx.load_align_model(
-        language_code=language,
-        device=device,
-    )
-    try:
-        aligned = whisperx.align(
-            result["segments"],
-            align_model,
-            align_metadata,
-            audio,
-            device,
-            return_char_alignments=False,
-        )
-        result["segments"] = aligned["segments"]
-    finally:
-        del align_model
-        gc.collect()
-        if device == "cuda":
-            torch.cuda.empty_cache()
-
-    min_speakers = _env_int("WHISPERX_MIN_SPEAKERS")
-    max_speakers = _env_int("WHISPERX_MAX_SPEAKERS")
-    diarize_kw: dict = {}
-    if min_speakers is not None:
-        diarize_kw["min_speakers"] = min_speakers
-    if max_speakers is not None:
-        diarize_kw["max_speakers"] = max_speakers
-
-    diarize_model = _get_diarize_pipeline(hf_token, device)
-    diarize_segments = diarize_model(audio, **diarize_kw)
-    result = whisperx.assign_word_speakers(
-        diarize_segments, result, fill_nearest=True
-    )
+    api_key = _get_api_key()
+    upload_url = _upload(p, api_key)
+    transcript_id = _request_transcript(upload_url, api_key)
+    data = _poll_transcript(transcript_id, api_key)
 
     rows: list[tuple[str, str]] = []
-    ends: list[float] = []
-    for seg in result.get("segments") or []:
-        text = (seg.get("text") or "").strip()
-        if not text:
-            continue
-        raw = seg.get("speaker")
-        label = _format_speaker_label(raw) if raw is not None else ""
-        rows.append((label, text))
-        end = seg.get("end")
-        if isinstance(end, (int, float)):
-            ends.append(float(end))
+    utterances = data.get("utterances") or []
+    if utterances:
+        for u in utterances:
+            text = (u.get("text") or "").strip()
+            if not text:
+                continue
+            label = _format_speaker_label(u.get("speaker"))
+            rows.append((label, text))
+    else:
+        # Fallback: no speaker_labels (single speaker / very short clip).
+        text = (data.get("text") or "").strip()
+        if text:
+            rows.append(("", text))
 
-    duration = max(ends) if ends else 0.0
+    duration_ms = data.get("audio_duration") or 0
+    # AssemblyAI returns seconds in `audio_duration` (despite the name),
+    # but defensively handle both seconds and milliseconds.
+    duration = float(duration_ms)
+    if duration > MAX_AUDIO_DURATION_SEC * 10:  # clearly milliseconds
+        duration = duration / 1000.0
+
     if duration > MAX_AUDIO_DURATION_SEC:
         raise ValueError(
             f"Audio is too long ({int(duration)}s). "

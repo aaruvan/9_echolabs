@@ -1,94 +1,81 @@
 """
-Semantic search over the local coaching knowledge base (A8-style retrieval).
-Uses sentence-transformers (same family as rag-pipeline experiments) with
-cosine similarity; no paid API.
+Semantic search over the coaching knowledge base.
+
+Embeddings for the corpus are pre-computed offline by scripts/build_coach_index.py
+and shipped as conversations/data/coach_index.json. At runtime, only the query
+embedding is computed on demand via the Hugging Face Inference API, so production
+needs no torch / sentence-transformers / sklearn dependencies.
 """
 from __future__ import annotations
 
-import re
+import json
+import os
 from pathlib import Path
 from typing import List, Tuple
 
 import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
+from huggingface_hub import InferenceClient
 
-KB_PATH = Path(__file__).resolve().parent / "data" / "coach_knowledge.md"
-# Medium embedding model used in A8 RAG notebook experiments
-EMBED_MODEL_NAME = "sentence-transformers/multi-qa-mpnet-base-cos-v1"
+INDEX_PATH = Path(__file__).resolve().parent / "data" / "coach_index.json"
 TOP_K = 5
 MIN_SCORE = 0.28
 MAX_QUERY_LEN = 500
 
-_model = None
-_chunk_texts: List[str] | None = None
-_chunk_embeddings: np.ndarray | None = None
+_chunks: List[str] | None = None
+_embeddings: np.ndarray | None = None
+_index_model: str | None = None
+_client: InferenceClient | None = None
 
 
-def _split_long_paragraph(text: str, max_words: int = 220) -> List[str]:
-    words = text.split()
-    if len(words) <= max_words:
-        return [text]
-    chunks: List[str] = []
-    current: List[str] = []
-    wc = 0
-    for w in words:
-        current.append(w)
-        wc += 1
-        if wc >= max_words:
-            chunks.append(" ".join(current))
-            current = []
-            wc = 0
-    if current:
-        chunks.append(" ".join(current))
-    return chunks
-
-
-def _load_chunk_texts() -> List[str]:
-    raw = KB_PATH.read_text(encoding="utf-8")
-    paragraphs: List[str] = []
-    for block in re.split(r"\n\s*\n", raw):
-        block = block.strip()
-        if not block:
-            continue
-        lines = []
-        for line in block.split("\n"):
-            line = line.strip()
-            if line.startswith("#"):
-                continue
-            lines.append(line)
-        merged = " ".join(lines).strip()
-        if not merged:
-            continue
-        for piece in _split_long_paragraph(merged):
-            if piece:
-                paragraphs.append(piece)
-    if not paragraphs:
-        raise RuntimeError("Coach knowledge base is empty or unreadable.")
-    return paragraphs
-
-
-def _get_model():
-    global _model
-    if _model is None:
-        from sentence_transformers import SentenceTransformer
-
-        _model = SentenceTransformer(EMBED_MODEL_NAME)
-    return _model
-
-
-def _ensure_index() -> None:
-    global _chunk_texts, _chunk_embeddings
-    if _chunk_embeddings is not None and _chunk_texts is not None:
+def _load_index() -> None:
+    global _chunks, _embeddings, _index_model
+    if _embeddings is not None:
         return
-    _chunk_texts = _load_chunk_texts()
-    model = _get_model()
-    emb = model.encode(
-        _chunk_texts,
-        normalize_embeddings=True,
-        show_progress_bar=False,
-        convert_to_numpy=True,
-    )
-    _chunk_embeddings = np.asarray(emb, dtype=np.float32)
+    if not INDEX_PATH.is_file():
+        raise RuntimeError(
+            f"Coach index not found at {INDEX_PATH}. "
+            "Run `python scripts/build_coach_index.py` to generate it."
+        )
+    payload = json.loads(INDEX_PATH.read_text(encoding="utf-8"))
+    _chunks = list(payload["chunks"])
+    _embeddings = np.asarray(payload["embeddings"], dtype=np.float32)
+    _index_model = str(payload["model"])
+
+
+def _get_client() -> InferenceClient:
+    global _client
+    if _client is None:
+        token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
+        if not token:
+            raise RuntimeError(
+                "HF_TOKEN is not set. Add it to .env (dev) or to your host's "
+                "environment variables (prod) to enable coach search."
+            )
+        _client = InferenceClient(token=token)
+    return _client
+
+
+def _embed_query(text: str) -> np.ndarray:
+    """Return a 1-D, L2-normalized query embedding matching the index dim."""
+    assert _index_model is not None
+    client = _get_client()
+    raw = client.feature_extraction(text, model=_index_model)
+    arr = np.asarray(raw, dtype=np.float32)
+    # The Inference API may return (dim,) (already pooled) or (seq_len, dim)
+    # (token-level). Mean-pool token-level outputs to match the index.
+    if arr.ndim == 2:
+        arr = arr.mean(axis=0)
+    elif arr.ndim == 3:
+        arr = arr.mean(axis=1).squeeze(0)
+    norm = np.linalg.norm(arr)
+    if norm > 0:
+        arr = arr / norm
+    return arr
+
+
+def _cosine(query: np.ndarray, matrix: np.ndarray) -> np.ndarray:
+    # Index embeddings are already L2-normalized; query is normalized in _embed_query.
+    return matrix @ query
 
 
 def search(query: str) -> Tuple[List[dict], str | None]:
@@ -103,24 +90,24 @@ def search(query: str) -> Tuple[List[dict], str | None]:
     if len(q) > MAX_QUERY_LEN:
         raise ValueError(f"Query must be at most {MAX_QUERY_LEN} characters.")
 
-    _ensure_index()
-    assert _chunk_texts is not None and _chunk_embeddings is not None
+    _load_index()
+    assert _chunks is not None and _embeddings is not None
 
-    model = _get_model()
-    q_emb = model.encode(
-        [q],
-        normalize_embeddings=True,
-        show_progress_bar=False,
-        convert_to_numpy=True,
-    )
-    sims = cosine_similarity(q_emb, _chunk_embeddings)[0]
+    q_emb = _embed_query(q)
+    if q_emb.shape[0] != _embeddings.shape[1]:
+        raise RuntimeError(
+            f"Query embedding dim ({q_emb.shape[0]}) does not match index dim "
+            f"({_embeddings.shape[1]}). Rebuild the index with the same model."
+        )
+
+    sims = _cosine(q_emb, _embeddings)
     order = np.argsort(-sims)[:TOP_K]
     results: List[dict] = []
     for i in order:
         score = float(sims[int(i)])
         if score < MIN_SCORE:
             continue
-        results.append({"text": _chunk_texts[int(i)], "score": round(score, 4)})
+        results.append({"text": _chunks[int(i)], "score": round(score, 4)})
     if not results:
         return [], (
             "No passages matched strongly enough for that query. "

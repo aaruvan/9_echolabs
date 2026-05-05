@@ -190,6 +190,22 @@ All A5 features are implemented and working locally. Production deployment was b
 - Protected APIs: `/api/conversations/`, `/api/conversations.txt`, `/api/summary/`
 - Public API: `/api/public/conversations/`
 
+## Deployment note – hosted AI models
+
+The deployed version on Render does **not** use the local AI models the project was originally built around (`torch` + `transformers` + `whisperx` + `sentence-transformers`). That dependency bundle is ~1.5 GB — too large for free-tier hosts (it's what blocked the earlier PythonAnywhere deploy due to disk quota), and slow on CPU-only infrastructure.
+
+For the deployed/production build the AI workloads were swapped to hosted APIs:
+
+- **Transcription + speaker diarization** → AssemblyAI (`ASSEMBLYAI_API_KEY`), replacing local WhisperX + pyannote.
+- **Summarization** → Hugging Face Inference Providers `chat_completion` (`HF_TOKEN`), replacing the local BART model.
+- **Semantic coach search** → embeddings for the knowledge base are pre-computed offline by `scripts/build_coach_index.py` (committed as `conversations/data/coach_index.json`); query embeddings at runtime go through HF Inference, so production has zero `torch` / `sentence-transformers` deps.
+
+This drops the production install from ~1.5 GB to ~50 MB, fits within Render's free tier, and makes transcription/summarization considerably faster (network calls instead of CPU model inference).
+
+Hosting stack: Render Web Service (gunicorn + WhiteNoise) + Render PostgreSQL. See `render.yaml` and `build.sh`.
+
+The original local-AI code paths described in the **A9** section below still exist as the development-time reference and are what the assignment was originally written against.
+
 ## A9 – AI in Django (local + optional API)
 
 - **Local summarization:** conversation detail → “Generate summary” (`/api/summarize/<id>/`). Uses Hugging Face `transformers` (weights download on first use).
