@@ -50,7 +50,8 @@ class AudioTranscribeForm(forms.Form):
         label="Audio file",
         widget=forms.ClearableFileInput(
             attrs={
-                "class": "block w-full text-sm text-muted-foreground file:mr-4 file:rounded-lg file:border-0 file:bg-primary file:px-4 file:py-2 file:text-sm file:font-medium file:text-primary-foreground",
+                "class": "hidden",
+                "style": "display:none",
                 "accept": "audio/*,.mp4,.mpeg,.mpga",
             }
         ),

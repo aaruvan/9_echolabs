@@ -666,23 +666,44 @@ def reports_view(request):
     conversations = Conversation.objects.all()
     total_conversations = conversations.count()
     total_segments = TranscriptSegment.objects.count()
+    total_notes = ImprovementNote.objects.count()
+    total_users = conversations.values("user").distinct().count()
 
-    by_user = (
+    by_user_raw = list(
         conversations.values("user__username")
         .annotate(count=Count("id"))
         .order_by("-count", "user__username")
     )
-    by_note_type = (
+    max_user_count = max((r["count"] for r in by_user_raw), default=0)
+
+    note_type_labels = dict(ImprovementNote.NoteType.choices)
+    by_note_type_raw = list(
         ImprovementNote.objects.values("note_type")
         .annotate(count=Count("id"))
         .order_by("-count")
     )
+    by_note_type = [
+        {
+            "note_type": r["note_type"],
+            "label": note_type_labels.get(r["note_type"], r["note_type"]),
+            "count": r["count"],
+        }
+        for r in by_note_type_raw
+    ]
+    max_note_count = max((r["count"] for r in by_note_type), default=0)
+
+    avg_segments = round(total_segments / total_conversations, 1) if total_conversations else 0
 
     context = {
         "total_conversations": total_conversations,
         "total_segments": total_segments,
-        "by_user": by_user,
+        "total_notes": total_notes,
+        "total_users": total_users,
+        "avg_segments": avg_segments,
+        "by_user": by_user_raw,
+        "max_user_count": max_user_count,
         "by_note_type": by_note_type,
+        "max_note_count": max_note_count,
     }
     return render(request, "conversations/reports.html", context)
 
@@ -787,7 +808,7 @@ def insights_view(request):
 @login_required
 def transcribe_upload_view(request):
     """
-    Upload audio → WhisperX (ASR + align + diarization) → Conversation + segments.
+    Upload audio → AssemblyAI (transcription + speaker diarization) → Conversation + segments.
     Synchronous; capped file size and duration (see conversations/transcribe.py).
     """
     if request.method == "POST":
@@ -808,8 +829,8 @@ def transcribe_upload_view(request):
             except Exception as e:
                 form.add_error(
                     None,
-                    "Transcription failed. Check the file format, HF_TOKEN, and pyannote "
-                    f"model access on Hugging Face. ({e})",
+                    "Transcription failed. Check ASSEMBLYAI_API_KEY and the audio "
+                    f"format/length. ({e})",
                 )
             else:
                 conv = Conversation.objects.create(

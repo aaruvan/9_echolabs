@@ -93,18 +93,32 @@ def _upload(path: Path, api_key: str) -> str:
 
 def _request_transcript(audio_url: str, api_key: str) -> str:
     headers = {"authorization": api_key, "content-type": "application/json"}
-    body = {
+    # AssemblyAI requires `speech_models` (plural array) on every request.
+    # Allowed values per docs: "universal-3-pro", "universal-2".
+    raw = (os.environ.get("ASSEMBLYAI_SPEECH_MODELS") or "universal-2").strip()
+    speech_models = [m.strip() for m in raw.split(",") if m.strip()]
+    body: dict = {
         "audio_url": audio_url,
         "speaker_labels": True,
-        "language_code": os.environ.get("WHISPER_LANGUAGE") or "en",
+        "speech_models": speech_models,
     }
+    lang = (os.environ.get("WHISPER_LANGUAGE") or "").strip()
+    if lang:
+        body["language_code"] = lang
     r = requests.post(
         f"{ASSEMBLYAI_BASE}/transcript",
         headers=headers,
         json=body,
         timeout=30,
     )
-    r.raise_for_status()
+    if not r.ok:
+        try:
+            detail = r.json().get("error") or r.text
+        except ValueError:
+            detail = r.text
+        raise RuntimeError(
+            f"AssemblyAI rejected the transcript request ({r.status_code}): {detail}"
+        )
     transcript_id = r.json().get("id")
     if not transcript_id:
         raise RuntimeError("AssemblyAI did not return a transcript id.")

@@ -1,43 +1,140 @@
 {% extends "base.html" %}
+
+{% block title %}Reports — EchoLabs{% endblock %}
+
 {% block content %}
-<div class="card">
-    <h2>Reports</h2>
-    <p class="meta">Grouped summaries and export downloads.</p>
-
-    <p><strong>Totals:</strong> {{ total_conversations }} conversation(s), {{ total_segments }} segment(s).</p>
-
-    <h3>Conversations per user</h3>
-    <table>
-        <thead>
-            <tr><th>User</th><th>Count</th></tr>
-        </thead>
-        <tbody>
-            {% for row in by_user %}
-                <tr><td>{{ row.user__username|default:"Unknown" }}</td><td>{{ row.count }}</td></tr>
-            {% empty %}
-                <tr><td colspan="2">No data.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <h3>Improvement notes per type</h3>
-    <table>
-        <thead>
-            <tr><th>Note type</th><th>Count</th></tr>
-        </thead>
-        <tbody>
-            {% for row in by_note_type %}
-                <tr><td>{{ row.note_type }}</td><td>{{ row.count }}</td></tr>
-            {% empty %}
-                <tr><td colspan="2">No data.</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <h3>Export</h3>
-    <p>
-        <a href="{% url 'export_conversations_csv' %}"><button type="button">Download CSV</button></a>
-        <a href="{% url 'export_conversations_json' %}"><button type="button">Download JSON</button></a>
-    </p>
+<div class="flex items-start justify-between gap-4">
+    <div>
+        <h1 class="text-3xl font-bold tracking-tight text-foreground">
+            <span class="gradient-text">Reports</span>
+        </h1>
+        <p class="mt-2 text-muted-foreground">Grouped summaries and export downloads.</p>
+    </div>
+    <div class="hidden sm:flex items-center gap-2">
+        <a href="{% url 'export_conversations_csv' %}" class="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary">
+            <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+            CSV
+        </a>
+        <a href="{% url 'export_conversations_json' %}" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
+            <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+            JSON
+        </a>
+    </div>
 </div>
+
+{# Stat cards #}
+<div class="mt-8 grid grid-cols-2 gap-3 md:grid-cols-4">
+    <div class="rounded-lg border border-border bg-card p-5">
+        <div class="flex items-center justify-between">
+            <span class="metric-label">Conversations</span>
+            <svg class="h-4 w-4 text-primary" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <div class="mt-2 flex items-baseline gap-2">
+            <span class="text-2xl font-semibold font-mono text-foreground">{{ total_conversations }}</span>
+        </div>
+    </div>
+    <div class="rounded-lg border border-border bg-card p-5">
+        <div class="flex items-center justify-between">
+            <span class="metric-label">Segments</span>
+            <svg class="h-4 w-4 text-info" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
+        </div>
+        <div class="mt-2 flex items-baseline gap-2">
+            <span class="text-2xl font-semibold font-mono text-foreground">{{ total_segments }}</span>
+            <span class="text-xs text-muted-foreground">avg {{ avg_segments }}/conv</span>
+        </div>
+    </div>
+    <div class="rounded-lg border border-border bg-card p-5">
+        <div class="flex items-center justify-between">
+            <span class="metric-label">Improvement notes</span>
+            <svg class="h-4 w-4 text-warning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <div class="mt-2 flex items-baseline gap-2">
+            <span class="text-2xl font-semibold font-mono text-foreground">{{ total_notes }}</span>
+        </div>
+    </div>
+    <div class="rounded-lg border border-border bg-card p-5">
+        <div class="flex items-center justify-between">
+            <span class="metric-label">Active users</span>
+            <svg class="h-4 w-4 text-success" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <div class="mt-2 flex items-baseline gap-2">
+            <span class="text-2xl font-semibold font-mono text-foreground">{{ total_users }}</span>
+        </div>
+    </div>
+</div>
+
+{# Two-column charts #}
+<div class="mt-8 grid gap-6 lg:grid-cols-2">
+    {# Conversations per user #}
+    <section class="rounded-lg border border-border bg-card p-6">
+        <div class="mb-1 flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-foreground">Conversations per user</h2>
+            <span class="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-mono text-secondary-foreground">{{ by_user|length }}</span>
+        </div>
+        <p class="mb-6 text-xs font-mono text-muted-foreground">Top contributors</p>
+        <div class="space-y-3">
+            {% for row in by_user %}
+            <div>
+                <div class="mb-1.5 flex items-center justify-between text-sm">
+                    <span class="font-medium text-foreground truncate">{{ row.user__username|default:"Unknown" }}</span>
+                    <span class="font-mono text-muted-foreground">{{ row.count }}</span>
+                </div>
+                <div class="h-2 w-full overflow-hidden rounded-full bg-muted/40">
+                    <div class="h-full rounded-full bg-primary" style="width: {% widthratio row.count max_user_count 100 %}%;"></div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="rounded-lg border border-dashed border-border p-6 text-center">
+                <p class="text-sm text-muted-foreground">No conversations yet.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    {# Improvement notes per type #}
+    <section class="rounded-lg border border-border bg-card p-6">
+        <div class="mb-1 flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-foreground">Improvement notes per type</h2>
+            <span class="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-mono text-secondary-foreground">{{ by_note_type|length }}</span>
+        </div>
+        <p class="mb-6 text-xs font-mono text-muted-foreground">Distribution by category</p>
+        <div class="space-y-3">
+            {% for row in by_note_type %}
+            <div>
+                <div class="mb-1.5 flex items-center justify-between text-sm">
+                    <span class="font-medium text-foreground truncate">{{ row.label }}</span>
+                    <span class="font-mono text-muted-foreground">{{ row.count }}</span>
+                </div>
+                <div class="h-2 w-full overflow-hidden rounded-full bg-muted/40">
+                    <div class="h-full rounded-full {% if row.note_type == 'filler_word' %}bg-warning{% elif row.note_type == 'confidence' or row.note_type == 'tone' %}bg-success{% else %}bg-info{% endif %}" style="width: {% widthratio row.count max_note_count 100 %}%;"></div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="rounded-lg border border-dashed border-border p-6 text-center">
+                <p class="text-sm text-muted-foreground">No improvement notes yet.</p>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+</div>
+
+{# Export panel #}
+<section class="mt-8 rounded-lg border border-border bg-card p-6">
+    <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+            <h2 class="text-lg font-semibold text-foreground">Export data</h2>
+            <p class="mt-1 text-sm text-muted-foreground">Download the full conversations dataset for offline analysis.</p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+            <a href="{% url 'export_conversations_csv' %}" class="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary">
+                <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                Download CSV
+            </a>
+            <a href="{% url 'export_conversations_json' %}" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
+                <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+                Download JSON
+            </a>
+        </div>
+    </div>
+</section>
 {% endblock %}
